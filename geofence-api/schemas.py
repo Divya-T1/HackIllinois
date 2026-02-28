@@ -1,0 +1,105 @@
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+from datetime import datetime
+
+
+# ── Merchant ─────────────────────────────────────────────────────────────────
+
+class MerchantCreate(BaseModel):
+    name: str
+    email: EmailStr
+
+
+class MerchantResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    api_key: str
+    stripe_account_id: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Discount tiers ────────────────────────────────────────────────────────────
+
+class DiscountTierCreate(BaseModel):
+    type: str   # new_customer | frequent_visitor | lapsed_customer | regular
+    percent: int
+
+
+class DiscountTierResponse(BaseModel):
+    id: int
+    tier_type: str
+    percent: int
+
+    model_config = {"from_attributes": True}
+
+
+# ── Geofence ──────────────────────────────────────────────────────────────────
+
+class ActiveHours(BaseModel):
+    start: str = "07:00"
+    end: str = "20:00"
+
+
+class GeofenceCreate(BaseModel):
+    name: str
+    lat: float
+    lng: float
+    radius_meters: float = 75.0
+    discount_tiers: List[DiscountTierCreate]
+    max_discount: int = 20
+    active_hours: ActiveHours = ActiveHours()
+
+
+class GeofenceResponse(BaseModel):
+    id: str
+    merchant_id: str
+    name: str
+    lat: float
+    lng: float
+    radius_meters: float
+    max_discount: int
+    active_hours_start: str
+    active_hours_end: str
+    is_active: bool
+    discount_tiers: List[DiscountTierResponse]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Checkin / Offer ───────────────────────────────────────────────────────────
+
+class CheckinRequest(BaseModel):
+    user_id: str
+    lat: float
+    lng: float
+    merchant_id: Optional[str] = None   # required when not using API key auth
+
+
+class OfferPersonalization(BaseModel):
+    reason_code: str
+    explanation: str
+
+
+class CheckinResponse(BaseModel):
+    offer_id: Optional[str] = None
+    enabled: bool
+    discount_percent: Optional[int] = None
+    personalization: Optional[OfferPersonalization] = None
+    stripe_payment_link: Optional[str] = None
+    geofence_name: Optional[str] = None
+    message: str
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+class AnalyticsResponse(BaseModel):
+    merchant_id: str
+    total_offers: int
+    redeemed_offers: int
+    redemption_rate: float
+    total_revenue: float
+    conversion_percent: float

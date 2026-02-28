@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geofence Offer Engine — Champaign Demo</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#7c3aed', light: '#a78bfa', dark: '#4c1d95' },
+            surface: '#0f0f1a',
+            card: '#1a1a2e',
+            border: '#2d2d4e',
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="bg-surface text-gray-100 font-mono h-screen flex flex-col overflow-hidden">
+
+  <!-- Header -->
+  <header class="bg-card border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <span class="text-brand text-xl font-bold">⬡</span>
+      <span class="text-white font-bold tracking-wide">Geofence Offer Engine</span>
+      <span class="text-xs text-gray-500 ml-2">Downtown Champaign, IL — Demo</span>
+    </div>
+    <div class="flex items-center gap-4 text-xs text-gray-400">
+      <span id="api-status" class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span> connecting…
+      </span>
+      <a href="http://localhost:8000/docs" target="_blank"
+         class="text-brand-light hover:underline">API Docs ↗</a>
+    </div>
+  </header>
+
+  <!-- Main layout -->
+  <main class="flex flex-1 overflow-hidden">
+
+    <!-- ── Left panel ──────────────────────────────────────────────────────── -->
+    <aside class="w-80 shrink-0 bg-card border-r border-border flex flex-col overflow-hidden">
+
+      <!-- Merchant selector -->
+      <section class="p-4 border-b border-border">
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Merchant</label>
+        <select id="merchant-select"
+          class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
+          <option value="">— select a merchant —</option>
+        </select>
+        <div id="merchant-info" class="mt-2 text-xs text-gray-500 hidden">
+          <div>ID: <span id="info-id" class="text-gray-300"></span></div>
+          <div>Key: <span id="info-key" class="text-gray-300 break-all"></span></div>
+        </div>
+      </section>
+
+      <!-- Checkin simulator -->
+      <section class="p-4 border-b border-border">
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">
+          Simulate Checkin
+        </label>
+        <p class="text-xs text-gray-500 mb-3">Click anywhere on the map, or enter coordinates manually.</p>
+
+        <div class="space-y-2">
+          <div>
+            <label class="text-xs text-gray-400">User ID</label>
+            <input id="user-id" type="text" value="user_demo_01"
+              class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <label class="text-xs text-gray-400">Lat</label>
+              <input id="sim-lat" type="number" step="0.00001" placeholder="40.10982"
+                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+            </div>
+            <div class="flex-1">
+              <label class="text-xs text-gray-400">Lng</label>
+              <input id="sim-lng" type="number" step="0.00001" placeholder="-88.22814"
+                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+            </div>
+          </div>
+
+          <!-- Quick-jump buttons (geofence centres) -->
+          <div id="jump-buttons" class="flex flex-wrap gap-1 mt-1"></div>
+
+          <button id="checkin-btn"
+            class="w-full bg-brand hover:bg-brand-dark text-white rounded px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40"
+            disabled>
+            Trigger Checkin
+          </button>
+        </div>
+      </section>
+
+      <!-- Offer result -->
+      <section class="p-4 border-b border-border">
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">Last Offer</label>
+        <div id="offer-result" class="text-xs text-gray-500 italic">No offer yet.</div>
+      </section>
+
+      <!-- Recent feed -->
+      <section class="p-4 flex-1 overflow-y-auto">
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-xs text-gray-400 uppercase tracking-widest">Recent Checkins</label>
+          <button id="clear-feed" class="text-xs text-gray-600 hover:text-gray-400">clear</button>
+        </div>
+        <ul id="checkin-feed" class="space-y-2 text-xs"></ul>
+      </section>
+    </aside>
+
+    <!-- ── Map ────────────────────────────────────────────────────────────────── -->
+    <div class="flex-1 relative">
+      <div id="map" class="absolute inset-0"></div>
+
+      <!-- Analytics overlay -->
+      <div id="analytics-panel"
+        class="absolute top-3 right-3 bg-card/90 border border-border rounded-lg p-3 text-xs w-48 hidden backdrop-blur">
+        <div class="text-gray-400 uppercase tracking-widest mb-2 text-[10px]">Analytics</div>
+        <div class="space-y-1">
+          <div class="flex justify-between"><span class="text-gray-400">Offers sent</span><span id="a-total" class="text-white">—</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Redeemed</span><span id="a-redeemed" class="text-green-400">—</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Rate</span><span id="a-rate" class="text-brand-light">—</span></div>
+        </div>
+      </div>
+
+      <!-- Map hint -->
+      <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-card/80 text-gray-400 text-xs px-3 py-1 rounded-full border border-border pointer-events-none">
+        Click map to set checkin coordinates
+      </div>
+    </div>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

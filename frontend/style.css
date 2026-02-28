@@ -1,0 +1,51 @@
+/* ── Leaflet dark tiles ───────────────────────────────────────────────────── */
+.leaflet-tile { filter: brightness(0.6) saturate(0.8) hue-rotate(200deg); }
+.leaflet-container { background: #0f0f1a; }
+
+/* ── Geofence circle pulse on hover ──────────────────────────────────────── */
+.geofence-circle:hover { opacity: 0.9 !important; }
+
+/* ── Offer card ──────────────────────────────────────────────────────────── */
+.offer-card {
+  background: linear-gradient(135deg, #1e1b4b 0%, #1a1a2e 100%);
+  border: 1px solid #4c1d95;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  animation: slide-in 0.3s ease;
+}
+.offer-card.success { border-color: #7c3aed; }
+.offer-card.fail    { border-color: #374151; }
+
+/* ── Feed items ──────────────────────────────────────────────────────────── */
+.feed-item {
+  border-left: 2px solid #2d2d4e;
+  padding-left: 0.5rem;
+  opacity: 0;
+  animation: fade-in 0.4s ease forwards;
+}
+.feed-item.triggered  { border-color: #7c3aed; }
+.feed-item.no-trigger { border-color: #374151; }
+
+/* ── Animations ──────────────────────────────────────────────────────────── */
+@keyframes slide-in {
+  from { transform: translateY(-6px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2d2d4e; border-radius: 2px; }
+
+/* ── Marker pin override ─────────────────────────────────────────────────── */
+.pin-marker {
+  width: 10px; height: 10px;
+  background: #a78bfa;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #7c3aed;
+}
