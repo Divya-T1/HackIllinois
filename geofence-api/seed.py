@@ -161,25 +161,34 @@ SUZU_LNG = -88.24215
 
 DEMO_CUSTOMERS = [
     {
-        # Classified as: frequent_visitor (≥3 triggered checkins in past 7 days)
+        # Classified as: frequent_visitor (>=3 triggered checkins in past 7 days)
+        # Loyalty tier: silver (30 tokens -> +5pp bonus)
         "user_id": "user_demo_01",
         "total_visits": 5,
-        "last_seen_delta_days": 0,    # seen today
-        "checkin_days_ago": [1, 3, 5],  # 3 triggered checkins inside geofence
+        "last_seen_delta_days": 0,
+        "checkin_days_ago": [1, 3, 5],
+        "loyalty_tokens": 30,
+        "loyalty_tier": "silver",
     },
     {
         # Classified as: regular (recent, but <3 visits this week)
+        # Loyalty tier: bronze (12 tokens -> +2pp bonus)
         "user_id": "user_demo_02",
         "total_visits": 2,
-        "last_seen_delta_days": 1,    # seen yesterday
-        "checkin_days_ago": [8],       # only 1 triggered checkin inside 7-day window
+        "last_seen_delta_days": 1,
+        "checkin_days_ago": [8],
+        "loyalty_tokens": 12,
+        "loyalty_tier": "bronze",
     },
     {
         # Classified as: lapsed_customer (last seen 45 days ago)
+        # Loyalty tier: none (2 tokens after decay)
         "user_id": "user_demo_03",
         "total_visits": 3,
         "last_seen_delta_days": 45,
-        "checkin_days_ago": [],        # no recent triggered checkins
+        "checkin_days_ago": [],
+        "loyalty_tokens": 2,
+        "loyalty_tier": "none",
     },
 ]
 
@@ -257,12 +266,21 @@ def seed_demo_customers(db, suzu_id: str) -> None:
 
         last_seen = now - timedelta(days=demo["last_seen_delta_days"])
 
+        # Seed realistic loyalty token counts so demo users show different tiers
+        # user_demo_01 (frequent) -> silver (30 tokens)
+        # user_demo_02 (regular)  -> bronze (12 tokens)
+        # user_demo_03 (lapsed)   -> none   (2 tokens — decayed from inactivity)
+        seed_tokens = demo.get("loyalty_tokens", 0)
+        seed_tier   = demo.get("loyalty_tier", "none")
+
         customer = models.Customer(
             merchant_id=suzu_id,
             external_user_id=uid,
             first_seen=last_seen - timedelta(days=30),
             last_seen=last_seen,
             total_visits=demo["total_visits"],
+            loyalty_tokens=seed_tokens,
+            loyalty_tier=seed_tier,
         )
         db.add(customer)
 

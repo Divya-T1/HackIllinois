@@ -72,6 +72,13 @@ class Customer(Base):
     total_visits = Column(Integer, default=0)
     avg_spend = Column(Float, default=0.0)
 
+    # ── Loyalty token system ────────────────────────────────────────────────
+    # Tokens accumulate with every qualifying visit and decay with inactivity.
+    # Thresholds: 0-9 none | 10-24 bronze (+2pp) | 25-49 silver (+5pp)
+    #             50-99 gold (+10pp) | 100+ platinum (+15pp)
+    loyalty_tokens = Column(Integer, default=0, nullable=False)
+    loyalty_tier   = Column(String,  default="none", nullable=False)
+
     merchant = relationship("Merchant", back_populates="customers")
 
     __table_args__ = (
@@ -122,6 +129,10 @@ class Offer(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=utcnow)
     redeemed_at = Column(DateTime, nullable=True)
+
+    # Loyalty snapshot at time of offer — useful for analytics
+    loyalty_tier_at_offer   = Column(String,  nullable=True)
+    loyalty_tokens_at_offer = Column(Integer, nullable=True)
 
     merchant = relationship("Merchant", back_populates="offers")
     geofence = relationship("Geofence", back_populates="offers")

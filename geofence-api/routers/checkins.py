@@ -102,9 +102,21 @@ def process_checkin(
         db.add(customer)
         db.flush()
 
-    # ── 5. Decision engine ────────────────────────────────────────────────────
-    context = geo_engine.build_customer_context(customer, db, mid, payload.user_id)
-    tier_type = geo_engine.classify_customer(context)
+    # ── 5. Build context + classify ──────────────────────────────────────────
+    context   = geo_engine.build_customer_context(customer, db, mid, payload.user_id)
+    days_since = context["days_since_last_visit"]
+    tier_type  = geo_engine.classify_customer(context)
+
+    # ── 6. Loyalty token lifecycle (decay -> accrue -> recalculate tier) ──────
+    new_loyalty_tier, new_token_count = geo_engine.process_loyalty_tokens(
+        customer, tier_type, days_since
+    )
+    # Refresh context with post-lifecycle loyalty state so the bonus is correct
+    context["loyalty_tokens"]   = new_token_count
+    context["loyalty_tier"]     = new_loyalty_tier
+    _, context["loyalty_bonus_pp"] = geo_engine.resolve_loyalty_tier(new_token_count)
+
+    # ── 7. Select discount (base + loyalty bonus) ─────────────────────────────
     decision = geo_engine.select_discount_tier(triggered, tier_type, context)
 
     if not decision:
@@ -114,10 +126,10 @@ def process_checkin(
             message="No eligible discount tier configured for this geofence",
         )
 
-    # ── 6. Create Stripe coupon + payment link (or mock) ──────────────────────
+    # ── 8. Create Stripe coupon + payment link (or mock) ──────────────────────
     stripe_result = geo_engine.create_stripe_offer(merchant, decision["percent"])
 
-    # ── 7. Persist offer ──────────────────────────────────────────────────────
+    # ── 9. Persist offer (with loyalty snapshot) ──────────────────────────────
     offer = models.Offer(
         merchant_id=mid,
         geofence_id=triggered.id,
@@ -128,10 +140,12 @@ def process_checkin(
         stripe_coupon_id=stripe_result["coupon_id"],
         stripe_payment_link=stripe_result["payment_link"],
         status="pending",
+        loyalty_tier_at_offer=decision["loyalty_tier"],
+        loyalty_tokens_at_offer=decision["loyalty_tokens"],
     )
     db.add(offer)
 
-    customer.last_seen = datetime.now(timezone.utc)
+    customer.last_seen    = datetime.now(timezone.utc)
     customer.total_visits += 1
 
     db.commit()
@@ -144,6 +158,12 @@ def process_checkin(
         personalization=schemas.OfferPersonalization(
             reason_code=offer.reason_code,
             explanation=offer.reason_explanation,
+        ),
+        loyalty=schemas.LoyaltyStatus(
+            tier=decision["loyalty_tier"],
+            tokens=decision["loyalty_tokens"],
+            bonus_pp=decision["loyalty_bonus_pp"],
+            base_percent=decision["base_percent"],
         ),
         stripe_payment_link=offer.stripe_payment_link,
         geofence_name=triggered.name,
@@ -164,4 +184,47 @@ def get_offer(offer_id: str, db: Session = Depends(get_db)):
         "stripe_payment_link": offer.stripe_payment_link,
         "created_at": offer.created_at,
         "redeemed_at": offer.redeemed_at,
+    }
+
+
+@router.get("/customers/{merchant_id}/{user_id}/loyalty")
+def get_loyalty_status(
+    merchant_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Returns a customer's current loyalty tier, token balance, and progress
+    to the next tier. Useful for a loyalty card or progress bar in the frontend.
+    """
+    customer = (
+        db.query(models.Customer)
+        .filter(
+            models.Customer.merchant_id == merchant_id,
+            models.Customer.external_user_id == user_id,
+        )
+        .first()
+    )
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    tier, bonus_pp = geo_engine.resolve_loyalty_tier(customer.loyalty_tokens)
+
+    next_tier_name   = None
+    tokens_to_next   = None
+    for min_t, name, _ in geo_engine.LOYALTY_TIERS:
+        if min_t > customer.loyalty_tokens:
+            next_tier_name = name
+            tokens_to_next = min_t - customer.loyalty_tokens
+            break
+
+    return {
+        "external_user_id":    user_id,
+        "merchant_id":         merchant_id,
+        "loyalty_tokens":      customer.loyalty_tokens,
+        "loyalty_tier":        tier,
+        "loyalty_bonus_pp":    bonus_pp,
+        "total_visits":        customer.total_visits,
+        "next_tier":           next_tier_name,
+        "tokens_to_next_tier": tokens_to_next,
     }

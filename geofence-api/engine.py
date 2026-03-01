@@ -5,14 +5,37 @@ Two responsibilities:
   1. Geofence math — Haversine distance, active-hours check, find which
      geofence (if any) a coordinate falls inside.
   2. Decision layer — classify customer, select a merchant-approved discount
-     tier, build a Stripe offer (or a mock when no Stripe creds are set).
+     tier, apply loyalty token bonus, build a Stripe offer.
+
+Loyalty Token System
+--------------------
+Customers earn tokens on every qualifying checkin (one that triggers a geofence
+and results in an offer). Tokens decay when the customer goes inactive.
+
+Token → Tier mapping:
+    0-9    none      no bonus
+    10-24  bronze    +2 percentage points
+    25-49  silver    +5 percentage points
+    50-99  gold      +10 percentage points
+    100+   platinum  +15 percentage points
+
+Token accrual per visit:
+    new_customer      +3  (welcome bonus)
+    regular           +2
+    frequent_visitor  +4  (reward the habit)
+    lapsed_customer   +1  (they came back, but no windfall)
+
+Decay (applied on each checkin, before accrual):
+    30-59 days inactive ->  -5 tokens
+    60-89 days inactive -> -15 tokens
+    90+   days inactive ->  reset to 0
 """
 
 import math
 import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from uuid import uuid4
 
 import models
@@ -62,6 +85,83 @@ def find_triggered_geofence(
     return best
 
 
+
+# ── Loyalty token system ──────────────────────────────────────────────────────
+
+# (min_tokens, tier_name, discount_bonus_pp) — ordered highest first
+LOYALTY_TIERS = [
+    (100, "platinum", 15),
+    (50,  "gold",     10),
+    (25,  "silver",    5),
+    (10,  "bronze",    2),
+    (0,   "none",      0),
+]
+
+TOKEN_ACCRUAL: Dict[str, int] = {
+    "new_customer":     3,
+    "frequent_visitor": 4,
+    "regular":          2,
+    "lapsed_customer":  1,
+}
+
+TIER_EMOJI: Dict[str, str] = {
+    "platinum": "💎 Platinum",
+    "gold":     "🥇 Gold",
+    "silver":   "🥈 Silver",
+    "bronze":   "🥉 Bronze",
+    "none":     "",
+}
+
+
+def resolve_loyalty_tier(tokens: int) -> Tuple[str, int]:
+    """Return (tier_name, discount_bonus_pp) for a given token count."""
+    for min_t, name, bonus in LOYALTY_TIERS:
+        if tokens >= min_t:
+            return name, bonus
+    return "none", 0
+
+
+def apply_token_decay(customer: models.Customer, days_since: int) -> int:
+    """Decay tokens based on inactivity. Modifies customer in-place."""
+    tokens = customer.loyalty_tokens
+    if days_since >= 90:
+        tokens = 0
+    elif days_since >= 60:
+        tokens = max(0, tokens - 15)
+    elif days_since >= 30:
+        tokens = max(0, tokens - 5)
+    customer.loyalty_tokens = tokens
+    return tokens
+
+
+def accrue_tokens(customer: models.Customer, tier_type: str) -> int:
+    """Add visit tokens. Modifies customer in-place."""
+    customer.loyalty_tokens += TOKEN_ACCRUAL.get(tier_type, 2)
+    return customer.loyalty_tokens
+
+
+def update_loyalty_tier(customer: models.Customer) -> Tuple[str, int]:
+    """Recalculate and persist tier label. Returns (tier_name, bonus_pp)."""
+    tier, bonus = resolve_loyalty_tier(customer.loyalty_tokens)
+    customer.loyalty_tier = tier
+    return tier, bonus
+
+
+def process_loyalty_tokens(
+    customer: models.Customer,
+    tier_type: str,
+    days_since: int,
+) -> Tuple[str, int]:
+    """
+    Full token lifecycle for one checkin: decay -> accrue -> recalculate tier.
+    Returns (new_tier_name, new_token_count). Call before db.commit().
+    """
+    apply_token_decay(customer, days_since)
+    accrue_tokens(customer, tier_type)
+    tier, _ = update_loyalty_tier(customer)
+    return tier, customer.loyalty_tokens
+
+
 # ── Customer context ──────────────────────────────────────────────────────────
 
 def build_customer_context(
@@ -78,6 +178,9 @@ def build_customer_context(
             "days_since_last_visit": 999,
             "avg_spend": 0.0,
             "current_hour": datetime.now(timezone.utc).hour,
+            "loyalty_tokens": 0,
+            "loyalty_tier": "none",
+            "loyalty_bonus_pp": 0,
         }
 
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
@@ -100,12 +203,17 @@ def build_customer_context(
             last = last.replace(tzinfo=timezone.utc)
         days_since = (datetime.now(timezone.utc) - last).days
 
+    _, bonus_pp = resolve_loyalty_tier(customer.loyalty_tokens)
+
     return {
         "total_visits": customer.total_visits,
         "visits_last_7_days": visits_7d,
         "days_since_last_visit": days_since,
         "avg_spend": customer.avg_spend,
         "current_hour": datetime.now(timezone.utc).hour,
+        "loyalty_tokens": customer.loyalty_tokens,
+        "loyalty_tier": customer.loyalty_tier,
+        "loyalty_bonus_pp": bonus_pp,
     }
 
 
@@ -140,9 +248,8 @@ def select_discount_tier(
     context: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     """
-    Pick a discount from the merchant's approved tiers.
-    Falls back to the lowest tier if the classified type isn't configured.
-    Hard-caps at geofence.max_discount.
+    Pick a base discount from the merchant's approved tiers, then apply the
+    loyalty token bonus on top. Hard-caps at geofence.max_discount.
     """
     tiers: Dict[str, int] = {t.tier_type: t.percent for t in geofence.discount_tiers}
     if not tiers:
@@ -150,16 +257,18 @@ def select_discount_tier(
 
     if tier_type in tiers:
         chosen_type = tier_type
-        percent = tiers[tier_type]
+        base_percent = tiers[tier_type]
     else:
         # Graceful fallback: use cheapest available tier
         chosen_type = min(tiers, key=lambda k: tiers[k])
-        percent = tiers[chosen_type]
+        base_percent = tiers[chosen_type]
 
-    percent = min(percent, geofence.max_discount)
+    # Apply loyalty bonus on top of base, capped at merchant max
+    loyalty_tier = context.get("loyalty_tier", "none")
+    bonus_pp     = context.get("loyalty_bonus_pp", 0)
+    final_percent = min(base_percent + bonus_pp, geofence.max_discount)
 
     explanation = _EXPLANATIONS.get(chosen_type, "Special offer just for you!")
-    # Enrich lapsed explanation with actual days
     if chosen_type == "lapsed_customer" and context["days_since_last_visit"] < 999:
         explanation = (
             f"We've missed you! It's been {context['days_since_last_visit']} days "
@@ -171,7 +280,23 @@ def select_discount_tier(
             f"{context['visits_last_7_days']} times this week."
         )
 
-    return {"tier_type": chosen_type, "percent": percent, "explanation": explanation}
+    # Append loyalty bonus callout when applicable
+    if loyalty_tier != "none" and bonus_pp > 0:
+        label = TIER_EMOJI.get(loyalty_tier, loyalty_tier.capitalize())
+        explanation += (
+            f" {label} loyalty bonus applied: +{bonus_pp}% "
+            f"(base {base_percent}% -> {final_percent}% total)."
+        )
+
+    return {
+        "tier_type":       chosen_type,
+        "percent":         final_percent,
+        "base_percent":    base_percent,
+        "loyalty_tier":    loyalty_tier,
+        "loyalty_bonus_pp": bonus_pp,
+        "loyalty_tokens":  context.get("loyalty_tokens", 0),
+        "explanation":     explanation,
+    }
 
 
 # ── Stripe integration ────────────────────────────────────────────────────────
