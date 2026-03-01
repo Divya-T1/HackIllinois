@@ -84,11 +84,20 @@ class OfferPersonalization(BaseModel):
     explanation: str
 
 
+class LoyaltyStatus(BaseModel):
+    """Loyalty snapshot returned with every triggered offer."""
+    tier: str          # none | bronze | silver | gold | platinum
+    tokens: int        # token balance after this visit
+    bonus_pp: int      # extra percentage points added on top of base discount
+    base_percent: int  # base discount before loyalty bonus was applied
+
+
 class CheckinResponse(BaseModel):
     offer_id: Optional[str] = None
     enabled: bool
     discount_percent: Optional[int] = None
     personalization: Optional[OfferPersonalization] = None
+    loyalty: Optional[LoyaltyStatus] = None
     stripe_payment_link: Optional[str] = None
     geofence_name: Optional[str] = None
     message: str
