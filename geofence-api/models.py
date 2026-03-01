@@ -106,6 +106,17 @@ class MerchantPromotion(Base):
     merchant = relationship("Merchant", backref="promotions")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=lambda: f"usr_{uuid4().hex[:12]}")
+    username = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=True)         # 'merchant' | 'customer'
+    merchant_id = Column(String, nullable=True)  # set after merchant registration
+    created_at = Column(DateTime, default=utcnow)
+
+
 class Offer(Base):
     __tablename__ = "offers"
 

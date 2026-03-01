@@ -9,6 +9,141 @@ let merchants         = [];
 let selectedMerchant  = null;
 let currentGeofences  = [];
 let currentMerchantName = "";
+let session           = null;   // { id, username, role, merchant_id }
+let userLat           = null;
+let userLng           = null;
+let authRoleSelected  = "customer";  // tracks role choice on register tab
+
+/* ── Session management ──────────────────────────────────────────────────── */
+function saveSession(user) {
+  session = user;
+  localStorage.setItem("goe_session", JSON.stringify(user));
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem("goe_session");
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
+function clearSession() {
+  session = null;
+  localStorage.removeItem("goe_session");
+}
+
+/* ── Auth screen ─────────────────────────────────────────────────────────── */
+let authMode = "login";
+
+function showAuthTab(mode) {
+  authMode = mode;
+  const isLogin = mode === "login";
+
+  document.getElementById("tab-login").className =
+    `flex-1 pb-2 text-sm font-semibold transition-colors border-b-2 ${
+      isLogin ? "text-white border-brand" : "text-gray-500 border-transparent hover:text-white"
+    }`;
+  document.getElementById("tab-register").className =
+    `flex-1 pb-2 text-sm font-semibold transition-colors border-b-2 ${
+      !isLogin ? "text-white border-brand" : "text-gray-500 border-transparent hover:text-white"
+    }`;
+  document.getElementById("auth-submit").textContent = isLogin ? "Log In" : "Register";
+  document.getElementById("auth-error").classList.add("hidden");
+
+  // Show role picker only on the register tab
+  const roleSelector = document.getElementById("role-selector");
+  if (isLogin) {
+    roleSelector.classList.add("hidden");
+  } else {
+    roleSelector.classList.remove("hidden");
+  }
+}
+
+function setAuthRole(role) {
+  authRoleSelected = role;
+  const active   = "flex-1 bg-brand text-white text-xs py-2 rounded border border-brand transition-colors";
+  const inactive = "flex-1 bg-surface text-gray-400 text-xs py-2 rounded border border-border hover:border-brand transition-colors";
+  document.getElementById("role-customer-btn").className = role === "customer" ? active : inactive;
+  document.getElementById("role-merchant-btn").className = role === "merchant" ? active : inactive;
+}
+
+async function submitAuth() {
+  const username = document.getElementById("auth-username").value.trim();
+  const password = document.getElementById("auth-password").value;
+  const errorEl  = document.getElementById("auth-error");
+  errorEl.classList.add("hidden");
+
+  if (!username || !password) {
+    errorEl.textContent = "Username and password are required.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  const btn = document.getElementById("auth-submit");
+  btn.disabled = true;
+  btn.textContent = "…";
+
+  try {
+    const isRegister = authMode === "register";
+    const endpoint   = isRegister ? "/v1/auth/register" : "/v1/auth/login";
+    const body       = { username, password };
+    if (isRegister) body.role = authRoleSelected;
+
+    const res = await fetch(`${API}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.detail ?? "Authentication failed.");
+    }
+
+    const user = await res.json();
+    saveSession(user);
+    showPostLogin(user);
+  } catch (e) {
+    errorEl.textContent = e.message;
+    errorEl.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === "register" ? "Register" : "Log In";
+  }
+}
+
+function showPostLogin(user) {
+  document.getElementById("screen-login").classList.add("hidden");
+  document.getElementById("logged-in-label").textContent = `@${user.username}`;
+  document.getElementById("logged-in-label").classList.remove("hidden");
+  document.getElementById("logout-btn").classList.remove("hidden");
+
+  // Auto-route directly to the user's role — no "Who are you?" step needed
+  if (user.role === "merchant") {
+    selectRole("merchant");
+  } else if (user.role === "customer") {
+    selectRole("customer");
+  } else {
+    // Fallback for legacy accounts without a stored role
+    document.getElementById("screen-landing").classList.remove("hidden");
+  }
+}
+
+function logout() {
+  clearSession();
+  document.getElementById("screen-landing").classList.add("hidden");
+  document.getElementById("screen-merchant").classList.add("hidden");
+  document.getElementById("main-content").classList.add("hidden");
+  document.getElementById("back-btn").classList.add("hidden");
+  document.getElementById("logged-in-label").classList.add("hidden");
+  document.getElementById("logout-btn").classList.add("hidden");
+  if (map) map.getCanvas().style.visibility = "hidden";
+  document.getElementById("auth-username").value = "";
+  document.getElementById("auth-password").value = "";
+  document.getElementById("auth-error").classList.add("hidden");
+  showAuthTab("login");
+  document.getElementById("screen-login").classList.remove("hidden");
+}
 
 /* ── Main map — MapLibre GL (3D) ─────────────────────────────────────────── */
 function initMap() {
@@ -59,16 +194,72 @@ function initMap() {
           "fill-extrusion-opacity": 0.75,
         },
       }, "geofences-fill");
-    } catch (_) { /* style may not expose building source */ }
+    } catch (_) {}
 
-    // ── Map click → place pin (skip if over a geofence) ───────────────────
+    // ── Building names (named buildings from tile data) ───────────────────
+    try {
+      map.addLayer({
+        id: "building-names",
+        source: "openmaptiles",
+        "source-layer": "building",
+        type: "symbol",
+        minzoom: 16,
+        filter: ["has", "name"],
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 10,
+          "text-anchor": "center",
+          "text-max-width": 8,
+          "text-allow-overlap": false,
+          "text-optional": true,
+        },
+        paint: {
+          "text-color": "#c4b5fd",
+          "text-halo-color": "#0f0f1a",
+          "text-halo-width": 1.5,
+        },
+      });
+    } catch (_) {}
+
+    // ── POI / place labels (restaurants, shops, campus buildings, etc.) ────
+    try {
+      map.addLayer({
+        id: "poi-labels",
+        source: "openmaptiles",
+        "source-layer": "poi",
+        type: "symbol",
+        minzoom: 15,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 11,
+          "text-anchor": "top",
+          "text-offset": [0, 0.5],
+          "text-max-width": 8,
+          "text-allow-overlap": false,
+          "text-optional": true,
+        },
+        paint: {
+          "text-color": "#c4b5fd",
+          "text-halo-color": "#0f0f1a",
+          "text-halo-width": 1.5,
+        },
+      });
+    } catch (_) {}
+
+    // ── Map click → place pin + auto-trigger if inside geofence ──────────
     map.on("click", (e) => {
-      const hit = map.queryRenderedFeatures(e.point, { layers: ["geofences-fill"] });
-      if (hit.length) return;
       const { lng, lat } = e.lngLat;
       document.getElementById("sim-lat").value = lat.toFixed(6);
       document.getElementById("sim-lng").value = lng.toFixed(6);
       placePinMarker(lat, lng);
+
+      // Auto-trigger checkin when clicking inside a geofence with merchant selected
+      const hit = map.queryRenderedFeatures(e.point, { layers: ["geofences-fill"] });
+      if (hit.length && selectedMerchant) {
+        triggerCheckin();
+      }
     });
 
     // ── Geofence click → popup ────────────────────────────────────────────
@@ -173,21 +364,72 @@ function buildJumpButtons(geofences) {
   });
 }
 
+/* ── Location / radius ───────────────────────────────────────────────────── */
+function requestLocation() {
+  const statusEl = document.getElementById("location-status");
+  const btn      = document.getElementById("locate-btn");
+  if (!navigator.geolocation) {
+    statusEl.textContent = "Geolocation not supported by your browser.";
+    return;
+  }
+  btn.textContent = "Locating…";
+  btn.disabled    = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      statusEl.textContent = "📍 Location acquired";
+      btn.textContent = "📍 Location Set";
+      btn.disabled    = false;
+      if (map) map.flyTo({ center: [userLng, userLat], zoom: 15, duration: 800 });
+    },
+    () => {
+      statusEl.textContent = "Could not get location. Check browser permissions.";
+      btn.textContent = "📍 Use My Location";
+      btn.disabled    = false;
+    }
+  );
+}
+
+async function applyRadius() {
+  if (userLat === null || userLng === null) {
+    document.getElementById("location-status").textContent =
+      'Click "Use My Location" first.';
+    return;
+  }
+  const radius = parseFloat(document.getElementById("radius-input").value) || 1000;
+  try {
+    const res  = await fetch(`${API}/v1/merchants/nearby?lat=${userLat}&lng=${userLng}&radius_meters=${radius}`);
+    const list = await res.json();
+    populateMerchantSelect(list);
+  } catch (e) {
+    console.error("Nearby fetch failed:", e);
+  }
+}
+
 /* ── Merchants ───────────────────────────────────────────────────────────── */
+function populateMerchantSelect(list) {
+  merchants = list;
+  const sel = document.getElementById("merchant-select");
+  sel.innerHTML = '<option value="">— select a merchant —</option>';
+
+  list.forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = m.name;
+    sel.appendChild(opt);
+  });
+
+  // Switch to scrollable listbox mode when there are many merchants
+  sel.size = list.length > 10 ? 8 : 1;
+}
+
 async function loadMerchants() {
   try {
-    const res = await fetch(`${API}/v1/merchants/`);
+    const res  = await fetch(`${API}/v1/merchants/`);
     if (!res.ok) throw new Error(res.statusText);
-    merchants = await res.json();
-
-    const sel = document.getElementById("merchant-select");
-    merchants.forEach(m => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.name;
-      sel.appendChild(opt);
-    });
-
+    const list = await res.json();
+    populateMerchantSelect(list);
     setStatus("online");
   } catch (e) {
     setStatus("offline");
@@ -199,16 +441,12 @@ async function onMerchantChange(merchantId) {
   if (!merchantId) {
     selectedMerchant = null;
     clearGeofenceCircles();
-    document.getElementById("merchant-info").classList.add("hidden");
     document.getElementById("checkin-btn").disabled = true;
     document.getElementById("analytics-panel").classList.add("hidden");
     return;
   }
 
   selectedMerchant = merchants.find(m => m.id === merchantId);
-  document.getElementById("info-id").textContent  = selectedMerchant.id;
-  document.getElementById("info-key").textContent = selectedMerchant.api_key;
-  document.getElementById("merchant-info").classList.remove("hidden");
   document.getElementById("checkin-btn").disabled = false;
 
   try {
@@ -227,7 +465,7 @@ async function triggerCheckin() {
 
   const lat    = parseFloat(document.getElementById("sim-lat").value);
   const lng    = parseFloat(document.getElementById("sim-lng").value);
-  const userId = document.getElementById("user-id").value.trim() || "user_demo_01";
+  const userId = (session && session.id) ? session.id : "user_demo_01";
 
   if (isNaN(lat) || isNaN(lng)) {
     alert("Click the map to set a location first.");
@@ -246,7 +484,7 @@ async function triggerCheckin() {
     });
     const data = await res.json();
     renderOfferResult(data);
-    appendFeedItem(data, userId);
+    appendFeedItem(data, session ? session.username : userId);
     loadAnalytics(selectedMerchant.id);
   } catch (e) {
     renderError(e.message);
@@ -294,17 +532,17 @@ function renderError(msg) {
     </div>`;
 }
 
-function appendFeedItem(data, userId) {
+function appendFeedItem(data, displayName) {
   const feed = document.getElementById("checkin-feed");
   const li   = document.createElement("li");
   const time = new Date().toLocaleTimeString();
 
   li.className = `feed-item ${data.enabled ? "triggered" : "no-trigger"}`;
   li.innerHTML = data.enabled
-    ? `<span class="text-brand-light">${userId}</span>
+    ? `<span class="text-brand-light">${displayName}</span>
        → <b class="text-green-400">${data.discount_percent}% off</b>
        <span class="text-gray-500 float-right">${time}</span>`
-    : `<span class="text-gray-400">${userId}</span>
+    : `<span class="text-gray-400">${displayName}</span>
        — <span class="text-gray-600">${data.message.slice(0, 30)}…</span>
        <span class="text-gray-600 float-right">${time}</span>`;
 
@@ -334,20 +572,40 @@ function setStatus(state) {
 
 /* ── Screen navigation ───────────────────────────────────────────────────── */
 function goHome() {
-  document.getElementById("screen-landing").classList.remove("hidden");
+  // Hide map canvas explicitly to prevent WebGL compositing bleed-through
+  if (map) map.getCanvas().style.visibility = "hidden";
+  document.getElementById("main-content").classList.add("hidden");
   document.getElementById("screen-merchant").classList.add("hidden");
   document.getElementById("back-btn").classList.add("hidden");
+  document.getElementById("screen-landing").classList.remove("hidden");
 }
 
 function selectRole(role) {
+  // Security: customers cannot access the merchant registration portal
+  if (session && session.role === "customer" && role === "merchant") {
+    alert("Your account is registered as a customer and cannot access the merchant portal.");
+    return;
+  }
+
   document.getElementById("screen-landing").classList.add("hidden");
   document.getElementById("screen-merchant").classList.add("hidden");
   document.getElementById("back-btn").classList.remove("hidden");
 
   if (role === "merchant") {
+    // Show "already registered" banner if user already has a merchant linked
+    if (session && session.merchant_id) {
+      const alreadyEl = document.getElementById("m-already-registered");
+      const detailEl  = document.getElementById("m-already-detail");
+      detailEl.textContent = `Company ID: ${session.merchant_id} — your account already has a merchant linked.`;
+      alreadyEl.classList.remove("hidden");
+      document.getElementById("m-submit").disabled = true;
+    }
     document.getElementById("screen-merchant").classList.remove("hidden");
     setTimeout(initMerchantMap, 80);
   } else {
+    document.getElementById("main-content").classList.remove("hidden");
+    // Restore canvas visibility (was hidden by goHome or logout)
+    if (map) map.getCanvas().style.visibility = "";
     if (!mapInitialized) {
       initMap();
       loadMerchants();
@@ -425,12 +683,8 @@ async function geocodeAddress() {
 
 /* ── Reload merchant list (after new merchant added) ─────────────────────── */
 async function reloadMerchants() {
-  const sel = document.getElementById("merchant-select");
-  sel.innerHTML = '<option value="">— select a merchant —</option>';
-  merchants = [];
   clearGeofenceCircles();
   selectedMerchant = null;
-  document.getElementById("merchant-info").classList.add("hidden");
   document.getElementById("checkin-btn").disabled = true;
   document.getElementById("analytics-panel").classList.add("hidden");
   await loadMerchants();
@@ -438,6 +692,14 @@ async function reloadMerchants() {
 
 /* ── Merchant registration form ──────────────────────────────────────────── */
 async function submitMerchantForm() {
+  // Block re-registration if user account already has a merchant linked
+  if (session && session.merchant_id) {
+    document.getElementById("m-error").textContent =
+      "Your account is already linked to a merchant.";
+    document.getElementById("m-error").classList.remove("hidden");
+    return;
+  }
+
   const name        = document.getElementById("m-name").value.trim();
   const lat         = parseFloat(document.getElementById("m-lat").value);
   const lng         = parseFloat(document.getElementById("m-lng").value);
@@ -472,7 +734,7 @@ async function submitMerchantForm() {
   submitBtn.textContent = "Submitting…";
 
   try {
-    // POST 1 — create merchant (name + id in merchants table)
+    // POST 1 — create merchant
     const email = `${name.toLowerCase().replace(/\s+/g, ".")}@demo.geooffer.com`;
     let merchant;
 
@@ -492,7 +754,7 @@ async function submitMerchantForm() {
       merchant = await mRes.json();
     }
 
-    // POST 2 — create geofence (shows on customer map)
+    // POST 2 — create geofence
     const gRes = await fetch(`${API}/v1/merchants/${merchant.id}/geofences`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": merchant.api_key },
@@ -512,7 +774,7 @@ async function submitMerchantForm() {
     });
     if (!gRes.ok) throw new Error((await gRes.json()).detail ?? "Failed to create geofence.");
 
-    // POST 3 — store discount description (company_id + description in promotions table)
+    // POST 3 — save promotion description
     const pRes = await fetch(`${API}/v1/promotions/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -520,13 +782,22 @@ async function submitMerchantForm() {
     });
     if (!pRes.ok) throw new Error((await pRes.json()).detail ?? "Failed to save promotion.");
 
+    // PATCH — link merchant to this user account
+    if (session) {
+      await fetch(`${API}/v1/auth/me/${session.id}/link-merchant?merchant_id=${merchant.id}`, {
+        method: "PATCH",
+      });
+      session.merchant_id = merchant.id;
+      saveSession(session);
+    }
+
     document.getElementById("m-success-detail").textContent =
       `Company ID: ${merchant.id} · Now visible on the customer map.`;
     successEl.classList.remove("hidden");
+    submitBtn.disabled = true;  // prevent double-submit after success
 
     if (mapInitialized) reloadMerchants();
 
-    // Reset form
     ["m-name", "m-address", "m-percent", "m-description"].forEach(id => {
       document.getElementById(id).value = "";
     });
@@ -536,14 +807,13 @@ async function submitMerchantForm() {
   } catch (e) {
     errorEl.textContent = e.message;
     errorEl.classList.remove("hidden");
-  } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "Submit";
   }
 }
 
 /* ── Bootstrap ───────────────────────────────────────────────────────────── */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("merchant-select").addEventListener("change", e =>
     onMerchantChange(e.target.value)
   );
@@ -551,4 +821,27 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("clear-feed").addEventListener("click", () => {
     document.getElementById("checkin-feed").innerHTML = "";
   });
+
+  // Allow Enter key to submit auth form
+  ["auth-username", "auth-password"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => {
+      if (e.key === "Enter") submitAuth();
+    });
+  });
+
+  // Restore session from localStorage and verify it's still valid
+  const saved = loadSession();
+  if (saved) {
+    try {
+      const res = await fetch(`${API}/v1/auth/me/${saved.id}`);
+      if (res.ok) {
+        const user = await res.json();
+        saveSession(user);
+        showPostLogin(user);
+        return;
+      }
+    } catch (_) { /* network error — fall through to login */ }
+    clearSession();
+  }
+  // Login screen is already visible by default from HTML
 });

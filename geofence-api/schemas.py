@@ -112,6 +112,28 @@ class PromotionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Auth / Users ──────────────────────────────────────────────────────────────
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    role: str  # 'merchant' | 'customer'
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    role: Optional[str] = None
+    merchant_id: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 class AnalyticsResponse(BaseModel):
