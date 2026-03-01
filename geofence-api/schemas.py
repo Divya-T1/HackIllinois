@@ -94,6 +94,24 @@ class CheckinResponse(BaseModel):
     message: str
 
 
+# ── Promotions ────────────────────────────────────────────────────────────────
+
+class PromotionCreate(BaseModel):
+    company_id: str
+    description: str
+    timeline: str  # day | week | month
+
+
+class PromotionResponse(BaseModel):
+    id: str
+    company_id: str
+    description: str
+    timeline: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 class AnalyticsResponse(BaseModel):

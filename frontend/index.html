@@ -39,10 +39,12 @@
       <span class="text-xs text-gray-500 ml-2">Downtown Champaign, IL — Demo</span>
     </div>
     <div class="flex items-center gap-4 text-xs text-gray-400">
+      <button id="back-btn" onclick="goHome()"
+        class="text-gray-500 hover:text-white transition-colors hidden">← Home</button>
       <span id="api-status" class="flex items-center gap-1">
         <span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span> connecting…
       </span>
-      <a href="http://localhost:8000/docs" target="_blank"
+      <a href="http://localhost:8001/docs" target="_blank"
          class="text-brand-light hover:underline">API Docs ↗</a>
     </div>
   </header>
@@ -141,6 +143,101 @@
     </div>
 
   </main>
+
+  <!-- ── Landing screen ──────────────────────────────────────────────────────── -->
+  <div id="screen-landing" class="fixed inset-0 bg-surface z-50 flex flex-col items-center justify-center">
+    <div class="text-brand text-5xl mb-4">⬡</div>
+    <h1 class="text-2xl font-bold text-white mb-1">Geofence Offer Engine</h1>
+    <p class="text-gray-500 text-sm mb-10">Downtown Champaign, IL — Demo</p>
+    <p class="text-gray-300 text-sm mb-5">Who are you?</p>
+    <div class="flex gap-4">
+      <button onclick="selectRole('merchant')"
+        class="bg-brand hover:bg-brand-dark text-white font-semibold px-8 py-3 rounded-lg text-sm transition-colors">
+        I'm a Merchant
+      </button>
+      <button onclick="selectRole('customer')"
+        class="bg-card hover:bg-border border border-border text-white font-semibold px-8 py-3 rounded-lg text-sm transition-colors">
+        I'm a Customer
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Merchant registration screen ────────────────────────────────────────── -->
+  <div id="screen-merchant" class="fixed inset-0 bg-surface z-40 flex flex-col items-center justify-start pt-6 overflow-y-auto hidden">
+    <div class="bg-card border border-border rounded-xl p-8 w-full max-w-md shadow-xl mb-6">
+      <div class="flex items-center gap-2 mb-6">
+        <span class="text-brand text-xl">⬡</span>
+        <h2 class="text-white font-bold text-lg">Merchant Registration</h2>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Company Name</label>
+          <input id="m-name" type="text" placeholder="e.g. Espresso Royale"
+            class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Location (click map to set)</label>
+          <div id="m-map" class="w-full h-36 rounded border border-border mb-2"></div>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <input id="m-lat" type="number" step="0.00001" placeholder="Latitude"
+                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+            </div>
+            <div class="flex-1">
+              <input id="m-lng" type="number" step="0.00001" placeholder="Longitude"
+                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+            </div>
+            <div class="w-20">
+              <input id="m-radius" type="number" placeholder="75m" value="75"
+                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+            </div>
+          </div>
+          <p class="text-gray-600 text-[10px] mt-1">Lat · Lng · Radius (m)</p>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Discount %</label>
+          <input id="m-percent" type="number" min="1" max="100" placeholder="e.g. 15"
+            class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Discount Description</label>
+          <textarea id="m-description" rows="3"
+            placeholder="e.g. 15% off all drinks for new customers this week"
+            class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand resize-none"></textarea>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Timeline</label>
+          <select id="m-timeline"
+            class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
+            <option value="day">Per Day</option>
+            <option value="week">Per Week</option>
+            <option value="month">Per Month</option>
+          </select>
+        </div>
+
+        <div id="m-error" class="text-red-400 text-xs hidden"></div>
+        <div id="m-success" class="bg-surface border border-brand/40 rounded p-3 text-xs hidden">
+          <div class="text-green-400 font-semibold mb-1">Registered successfully!</div>
+          <div id="m-success-detail" class="text-gray-400"></div>
+        </div>
+
+        <button id="m-submit" onclick="submitMerchantForm()"
+          class="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded text-sm transition-colors disabled:opacity-40">
+          Submit
+        </button>
+      </div>
+
+      <button onclick="goHome()"
+        class="mt-5 text-xs text-gray-500 hover:text-gray-300 w-full text-center transition-colors">
+        ← Back to Home
+      </button>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

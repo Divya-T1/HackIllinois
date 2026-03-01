@@ -94,6 +94,18 @@ class CheckinEvent(Base):
     geofence = relationship("Geofence", back_populates="checkins")
 
 
+class MerchantPromotion(Base):
+    __tablename__ = "merchant_promotions"
+
+    id = Column(String, primary_key=True, default=lambda: f"promo_{uuid4().hex[:12]}")
+    company_id = Column(String, ForeignKey("merchants.id"), nullable=False)
+    description = Column(String, nullable=False)
+    timeline = Column(String, nullable=False)  # day | week | month
+    created_at = Column(DateTime, default=utcnow)
+
+    merchant = relationship("Merchant", backref="promotions")
+
+
 class Offer(Base):
     __tablename__ = "offers"
 

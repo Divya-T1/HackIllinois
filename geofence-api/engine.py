@@ -11,6 +11,7 @@ Two responsibilities:
 import math
 import os
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -31,8 +32,11 @@ def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
 
 
 def is_within_active_hours(geofence: models.Geofence) -> bool:
-    """Return True if the current UTC time is inside the geofence's active window."""
-    current = datetime.now(timezone.utc).strftime("%H:%M")
+    """Return True if the current local time is inside the geofence's active window.
+    Active hours are interpreted as America/Chicago local time (where merchants are located).
+    """
+    local_tz = ZoneInfo("America/Chicago")
+    current = datetime.now(local_tz).strftime("%H:%M")
     start, end = geofence.active_hours_start, geofence.active_hours_end
     # Handle overnight windows, e.g. "18:00" → "02:00"
     if start <= end:

@@ -1,8 +1,10 @@
 /* ── Config ──────────────────────────────────────────────────────────────── */
-const API = "http://localhost:8000";
+const API = "http://localhost:8001";
 
 /* ── State ───────────────────────────────────────────────────────────────── */
 let map, pinMarker;
+let mapInitialized = false;
+let merchantMap, merchantMapMarker;
 let merchants      = [];
 let geofenceCircles = [];
 let selectedMerchant = null;
@@ -291,11 +293,185 @@ function setStatus(state) {
   }
 }
 
-/* ── Bootstrap ───────────────────────────────────────────────────────────── */
-document.addEventListener("DOMContentLoaded", async () => {
-  initMap();
-  await loadMerchants();
+/* ── Screen navigation ───────────────────────────────────────────────────── */
+function goHome() {
+  document.getElementById("screen-landing").classList.remove("hidden");
+  document.getElementById("screen-merchant").classList.add("hidden");
+  document.getElementById("back-btn").classList.add("hidden");
+}
 
+function selectRole(role) {
+  document.getElementById("screen-landing").classList.add("hidden");
+  document.getElementById("screen-merchant").classList.add("hidden");
+  document.getElementById("back-btn").classList.remove("hidden");
+
+  if (role === "merchant") {
+    document.getElementById("screen-merchant").classList.remove("hidden");
+    // Small delay so the div is visible before Leaflet measures it
+    setTimeout(initMerchantMap, 80);
+  } else {
+    // Customer view
+    if (!mapInitialized) {
+      initMap();
+      loadMerchants();
+      mapInitialized = true;
+    } else {
+      map.invalidateSize();
+      reloadMerchants();
+    }
+  }
+}
+
+/* ── Merchant mini-map ───────────────────────────────────────────────────── */
+function initMerchantMap() {
+  if (merchantMap) {
+    merchantMap.invalidateSize();
+    return;
+  }
+  merchantMap = L.map("m-map", { zoomControl: true }).setView([40.1130, -88.2350], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap contributors",
+    maxZoom: 19,
+  }).addTo(merchantMap);
+
+  merchantMap.on("click", (e) => {
+    const { lat, lng } = e.latlng;
+    document.getElementById("m-lat").value = lat.toFixed(6);
+    document.getElementById("m-lng").value = lng.toFixed(6);
+    if (merchantMapMarker) merchantMapMarker.remove();
+    merchantMapMarker = L.circleMarker([lat, lng], {
+      radius: 6, color: "#a78bfa", fillColor: "#7c3aed", fillOpacity: 1, weight: 2,
+    }).addTo(merchantMap).bindPopup(`${lat.toFixed(5)}, ${lng.toFixed(5)}`).openPopup();
+  });
+}
+
+/* ── Reload merchant list (after adding a new merchant) ──────────────────── */
+async function reloadMerchants() {
+  const sel = document.getElementById("merchant-select");
+  sel.innerHTML = '<option value="">— select a merchant —</option>';
+  merchants = [];
+  clearGeofenceCircles();
+  selectedMerchant = null;
+  document.getElementById("merchant-info").classList.add("hidden");
+  document.getElementById("checkin-btn").disabled = true;
+  document.getElementById("analytics-panel").classList.add("hidden");
+  await loadMerchants();
+}
+
+/* ── Merchant registration form ──────────────────────────────────────────── */
+async function submitMerchantForm() {
+  const name        = document.getElementById("m-name").value.trim();
+  const lat         = parseFloat(document.getElementById("m-lat").value);
+  const lng         = parseFloat(document.getElementById("m-lng").value);
+  const radius      = parseFloat(document.getElementById("m-radius").value) || 75;
+  const percent     = parseInt(document.getElementById("m-percent").value);
+  const description = document.getElementById("m-description").value.trim();
+  const timeline    = document.getElementById("m-timeline").value;
+  const errorEl     = document.getElementById("m-error");
+  const successEl   = document.getElementById("m-success");
+  const submitBtn   = document.getElementById("m-submit");
+
+  errorEl.classList.add("hidden");
+  successEl.classList.add("hidden");
+
+  if (!name || !description) {
+    errorEl.textContent = "Company name and discount description are required.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  if (isNaN(lat) || isNaN(lng)) {
+    errorEl.textContent = "Click the map (or enter coordinates) to set your location.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  if (isNaN(percent) || percent < 1 || percent > 100) {
+    errorEl.textContent = "Enter a discount % between 1 and 100.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Submitting…";
+
+  try {
+    // POST 1 — create merchant (name + id stored in merchants table)
+    const email = `${name.toLowerCase().replace(/\s+/g, ".")}@demo.geooffer.com`;
+    let merchant;
+
+    const mRes = await fetch(`${API}/v1/merchants/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email }),
+    });
+
+    if (mRes.status === 409) {
+      // Already registered — look up by name
+      const all = await (await fetch(`${API}/v1/merchants/`)).json();
+      merchant = all.find((m) => m.name === name);
+      if (!merchant) throw new Error("Merchant exists but could not be found.");
+    } else if (!mRes.ok) {
+      throw new Error((await mRes.json()).detail ?? "Failed to register merchant.");
+    } else {
+      merchant = await mRes.json();
+    }
+
+    // POST 2 — create geofence for this merchant (shows up on customer map)
+    const gRes = await fetch(`${API}/v1/merchants/${merchant.id}/geofences`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": merchant.api_key,
+      },
+      body: JSON.stringify({
+        name: `${name} Entrance`,
+        lat,
+        lng,
+        radius_meters: radius,
+        max_discount: percent,
+        discount_tiers: [
+          { type: "new_customer",     percent },
+          { type: "frequent_visitor", percent },
+          { type: "lapsed_customer",  percent },
+          { type: "regular",          percent: Math.max(5, Math.floor(percent * 0.6)) },
+        ],
+        active_hours: { start: "06:00", end: "23:00" },
+      }),
+    });
+    if (!gRes.ok) throw new Error((await gRes.json()).detail ?? "Failed to create geofence.");
+
+    // POST 3 — store discount description (company_id + description in promotions table)
+    const pRes = await fetch(`${API}/v1/promotions/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: merchant.id, description, timeline }),
+    });
+    if (!pRes.ok) throw new Error((await pRes.json()).detail ?? "Failed to save promotion.");
+
+    document.getElementById("m-success-detail").textContent =
+      `Company ID: ${merchant.id} · Now visible on the customer map.`;
+    successEl.classList.remove("hidden");
+
+    // If the customer map is already initialised, refresh it so the new merchant appears
+    if (mapInitialized) reloadMerchants();
+
+    // Reset form fields
+    document.getElementById("m-name").value = "";
+    document.getElementById("m-lat").value  = "";
+    document.getElementById("m-lng").value  = "";
+    document.getElementById("m-percent").value = "";
+    document.getElementById("m-description").value = "";
+    if (merchantMapMarker) { merchantMapMarker.remove(); merchantMapMarker = null; }
+  } catch (e) {
+    errorEl.textContent = e.message;
+    errorEl.classList.remove("hidden");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Submit";
+  }
+}
+
+/* ── Bootstrap ───────────────────────────────────────────────────────────── */
+document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("merchant-select").addEventListener("change", (e) =>
     onMerchantChange(e.target.value)
   );
