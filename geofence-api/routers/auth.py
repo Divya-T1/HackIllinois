@@ -17,9 +17,7 @@ def _hash(password: str) -> str:
 def register(payload: schemas.UserRegister, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.username == payload.username).first():
         raise HTTPException(status_code=409, detail="Username already taken")
-    if payload.role not in ("merchant", "customer"):
-        raise HTTPException(status_code=400, detail="Role must be 'merchant' or 'customer'")
-    user = models.User(username=payload.username, password_hash=_hash(payload.password), role=payload.role)
+    user = models.User(username=payload.username, password_hash=_hash(payload.password))
     db.add(user)
     db.commit()
     db.refresh(user)

@@ -117,7 +117,6 @@ class PromotionResponse(BaseModel):
 class UserRegister(BaseModel):
     username: str
     password: str
-    role: str  # 'merchant' | 'customer'
 
 
 class UserLogin(BaseModel):

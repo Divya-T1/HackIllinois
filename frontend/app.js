@@ -12,7 +12,6 @@ let currentMerchantName = "";
 let session           = null;   // { id, username, role, merchant_id }
 let userLat           = null;
 let userLng           = null;
-let authRoleSelected  = "customer";  // tracks role choice on register tab
 
 /* ── Session management ──────────────────────────────────────────────────── */
 function saveSession(user) {
@@ -33,7 +32,7 @@ function clearSession() {
 }
 
 /* ── Auth screen ─────────────────────────────────────────────────────────── */
-let authMode = "login";
+let authMode = "login"; // "login" | "register"
 
 function showAuthTab(mode) {
   authMode = mode;
@@ -49,22 +48,6 @@ function showAuthTab(mode) {
     }`;
   document.getElementById("auth-submit").textContent = isLogin ? "Log In" : "Register";
   document.getElementById("auth-error").classList.add("hidden");
-
-  // Show role picker only on the register tab
-  const roleSelector = document.getElementById("role-selector");
-  if (isLogin) {
-    roleSelector.classList.add("hidden");
-  } else {
-    roleSelector.classList.remove("hidden");
-  }
-}
-
-function setAuthRole(role) {
-  authRoleSelected = role;
-  const active   = "flex-1 bg-brand text-white text-xs py-2 rounded border border-brand transition-colors";
-  const inactive = "flex-1 bg-surface text-gray-400 text-xs py-2 rounded border border-border hover:border-brand transition-colors";
-  document.getElementById("role-customer-btn").className = role === "customer" ? active : inactive;
-  document.getElementById("role-merchant-btn").className = role === "merchant" ? active : inactive;
 }
 
 async function submitAuth() {
@@ -84,15 +67,11 @@ async function submitAuth() {
   btn.textContent = "…";
 
   try {
-    const isRegister = authMode === "register";
-    const endpoint   = isRegister ? "/v1/auth/register" : "/v1/auth/login";
-    const body       = { username, password };
-    if (isRegister) body.role = authRoleSelected;
-
+    const endpoint = authMode === "register" ? "/v1/auth/register" : "/v1/auth/login";
     const res = await fetch(`${API}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ username, password }),
     });
 
     if (!res.ok) {
@@ -114,30 +93,21 @@ async function submitAuth() {
 
 function showPostLogin(user) {
   document.getElementById("screen-login").classList.add("hidden");
+  document.getElementById("screen-landing").classList.remove("hidden");
   document.getElementById("logged-in-label").textContent = `@${user.username}`;
   document.getElementById("logged-in-label").classList.remove("hidden");
   document.getElementById("logout-btn").classList.remove("hidden");
-
-  // Auto-route directly to the user's role — no "Who are you?" step needed
-  if (user.role === "merchant") {
-    selectRole("merchant");
-  } else if (user.role === "customer") {
-    selectRole("customer");
-  } else {
-    // Fallback for legacy accounts without a stored role
-    document.getElementById("screen-landing").classList.remove("hidden");
-  }
 }
 
 function logout() {
   clearSession();
+  // Reset UI
   document.getElementById("screen-landing").classList.add("hidden");
   document.getElementById("screen-merchant").classList.add("hidden");
   document.getElementById("main-content").classList.add("hidden");
   document.getElementById("back-btn").classList.add("hidden");
   document.getElementById("logged-in-label").classList.add("hidden");
   document.getElementById("logout-btn").classList.add("hidden");
-  if (map) map.getCanvas().style.visibility = "hidden";
   document.getElementById("auth-username").value = "";
   document.getElementById("auth-password").value = "";
   document.getElementById("auth-error").classList.add("hidden");
@@ -194,68 +164,16 @@ function initMap() {
           "fill-extrusion-opacity": 0.75,
         },
       }, "geofences-fill");
-    } catch (_) {}
+    } catch (_) { /* style may not expose building source */ }
 
-    // ── Building names (named buildings from tile data) ───────────────────
-    try {
-      map.addLayer({
-        id: "building-names",
-        source: "openmaptiles",
-        "source-layer": "building",
-        type: "symbol",
-        minzoom: 16,
-        filter: ["has", "name"],
-        layout: {
-          "text-field": ["get", "name"],
-          "text-font": ["Noto Sans Regular"],
-          "text-size": 10,
-          "text-anchor": "center",
-          "text-max-width": 8,
-          "text-allow-overlap": false,
-          "text-optional": true,
-        },
-        paint: {
-          "text-color": "#c4b5fd",
-          "text-halo-color": "#0f0f1a",
-          "text-halo-width": 1.5,
-        },
-      });
-    } catch (_) {}
-
-    // ── POI / place labels (restaurants, shops, campus buildings, etc.) ────
-    try {
-      map.addLayer({
-        id: "poi-labels",
-        source: "openmaptiles",
-        "source-layer": "poi",
-        type: "symbol",
-        minzoom: 15,
-        layout: {
-          "text-field": ["get", "name"],
-          "text-font": ["Noto Sans Regular"],
-          "text-size": 11,
-          "text-anchor": "top",
-          "text-offset": [0, 0.5],
-          "text-max-width": 8,
-          "text-allow-overlap": false,
-          "text-optional": true,
-        },
-        paint: {
-          "text-color": "#c4b5fd",
-          "text-halo-color": "#0f0f1a",
-          "text-halo-width": 1.5,
-        },
-      });
-    } catch (_) {}
-
-    // ── Map click → place pin + auto-trigger if inside geofence ──────────
+    // ── Map click → place pin + optionally auto-trigger checkin ───────────
     map.on("click", (e) => {
       const { lng, lat } = e.lngLat;
       document.getElementById("sim-lat").value = lat.toFixed(6);
       document.getElementById("sim-lng").value = lng.toFixed(6);
       placePinMarker(lat, lng);
 
-      // Auto-trigger checkin when clicking inside a geofence with merchant selected
+      // Auto-trigger checkin if clicking inside a geofence while merchant selected
       const hit = map.queryRenderedFeatures(e.point, { layers: ["geofences-fill"] });
       if (hit.length && selectedMerchant) {
         triggerCheckin();
@@ -378,13 +296,14 @@ function requestLocation() {
     (pos) => {
       userLat = pos.coords.latitude;
       userLng = pos.coords.longitude;
-      statusEl.textContent = "📍 Location acquired";
+      statusEl.textContent = `📍 ${userLat.toFixed(5)}, ${userLng.toFixed(5)}`;
       btn.textContent = "📍 Location Set";
       btn.disabled    = false;
+      // Pan map to user location
       if (map) map.flyTo({ center: [userLng, userLat], zoom: 15, duration: 800 });
     },
-    () => {
-      statusEl.textContent = "Could not get location. Check browser permissions.";
+    (err) => {
+      statusEl.textContent = "Could not get location: " + err.message;
       btn.textContent = "📍 Use My Location";
       btn.disabled    = false;
     }
@@ -421,7 +340,11 @@ function populateMerchantSelect(list) {
   });
 
   // Switch to scrollable listbox mode when there are many merchants
-  sel.size = list.length > 10 ? 8 : 1;
+  if (list.length > 10) {
+    sel.size = 8;
+  } else {
+    sel.size = 1;
+  }
 }
 
 async function loadMerchants() {
@@ -572,31 +495,23 @@ function setStatus(state) {
 
 /* ── Screen navigation ───────────────────────────────────────────────────── */
 function goHome() {
-  // Hide map canvas explicitly to prevent WebGL compositing bleed-through
-  if (map) map.getCanvas().style.visibility = "hidden";
-  document.getElementById("main-content").classList.add("hidden");
-  document.getElementById("screen-merchant").classList.add("hidden");
-  document.getElementById("back-btn").classList.add("hidden");
   document.getElementById("screen-landing").classList.remove("hidden");
+  document.getElementById("screen-merchant").classList.add("hidden");
+  document.getElementById("main-content").classList.add("hidden");
+  document.getElementById("back-btn").classList.add("hidden");
 }
 
 function selectRole(role) {
-  // Security: customers cannot access the merchant registration portal
-  if (session && session.role === "customer" && role === "merchant") {
-    alert("Your account is registered as a customer and cannot access the merchant portal.");
-    return;
-  }
-
   document.getElementById("screen-landing").classList.add("hidden");
   document.getElementById("screen-merchant").classList.add("hidden");
   document.getElementById("back-btn").classList.remove("hidden");
 
   if (role === "merchant") {
-    // Show "already registered" banner if user already has a merchant linked
+    // Check if this user already registered a merchant
     if (session && session.merchant_id) {
-      const alreadyEl = document.getElementById("m-already-registered");
-      const detailEl  = document.getElementById("m-already-detail");
-      detailEl.textContent = `Company ID: ${session.merchant_id} — your account already has a merchant linked.`;
+      const alreadyEl  = document.getElementById("m-already-registered");
+      const detailEl   = document.getElementById("m-already-detail");
+      detailEl.textContent = `Company ID: ${session.merchant_id} · You have already registered a merchant with this account.`;
       alreadyEl.classList.remove("hidden");
       document.getElementById("m-submit").disabled = true;
     }
@@ -604,8 +519,6 @@ function selectRole(role) {
     setTimeout(initMerchantMap, 80);
   } else {
     document.getElementById("main-content").classList.remove("hidden");
-    // Restore canvas visibility (was hidden by goHome or logout)
-    if (map) map.getCanvas().style.visibility = "";
     if (!mapInitialized) {
       initMap();
       loadMerchants();
@@ -692,7 +605,7 @@ async function reloadMerchants() {
 
 /* ── Merchant registration form ──────────────────────────────────────────── */
 async function submitMerchantForm() {
-  // Block re-registration if user account already has a merchant linked
+  // Block re-registration if already linked
   if (session && session.merchant_id) {
     document.getElementById("m-error").textContent =
       "Your account is already linked to a merchant.";
@@ -782,7 +695,7 @@ async function submitMerchantForm() {
     });
     if (!pRes.ok) throw new Error((await pRes.json()).detail ?? "Failed to save promotion.");
 
-    // PATCH — link merchant to this user account
+    // PATCH — link merchant to logged-in user account
     if (session) {
       await fetch(`${API}/v1/auth/me/${session.id}/link-merchant?merchant_id=${merchant.id}`, {
         method: "PATCH",
@@ -794,10 +707,11 @@ async function submitMerchantForm() {
     document.getElementById("m-success-detail").textContent =
       `Company ID: ${merchant.id} · Now visible on the customer map.`;
     successEl.classList.remove("hidden");
-    submitBtn.disabled = true;  // prevent double-submit after success
+    submitBtn.disabled = true; // prevent double-submit
 
     if (mapInitialized) reloadMerchants();
 
+    // Reset form fields
     ["m-name", "m-address", "m-percent", "m-description"].forEach(id => {
       document.getElementById(id).value = "";
     });
@@ -807,8 +721,11 @@ async function submitMerchantForm() {
   } catch (e) {
     errorEl.textContent = e.message;
     errorEl.classList.remove("hidden");
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Submit";
+  } finally {
+    if (submitBtn.textContent === "Submitting…") {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit";
+    }
   }
 }
 
@@ -829,10 +746,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Restore session from localStorage and verify it's still valid
+  // Restore session from localStorage
   const saved = loadSession();
   if (saved) {
     try {
+      // Verify session is still valid
       const res = await fetch(`${API}/v1/auth/me/${saved.id}`);
       if (res.ok) {
         const user = await res.json();
@@ -843,5 +761,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (_) { /* network error — fall through to login */ }
     clearSession();
   }
-  // Login screen is already visible by default from HTML
+  // Show login screen (already visible by default from HTML)
 });

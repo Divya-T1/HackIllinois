@@ -36,7 +36,7 @@
 <body class="bg-surface text-gray-100 font-mono h-screen flex flex-col overflow-hidden">
 
   <!-- Header -->
-  <header class="bg-card border-b border-border px-6 py-3 flex items-center justify-between shrink-0 relative z-10">
+  <header class="bg-card border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
     <div class="flex items-center gap-3">
       <span class="text-brand text-xl font-bold">⬡</span>
       <span class="text-white font-bold tracking-wide">Geofence Offer Engine</span>
@@ -150,7 +150,7 @@
   </main>
 
   <!-- ── Login / Register screen ───────────────────────────────────────────── -->
-  <div id="screen-login" class="fixed inset-0 bg-surface z-[300] flex flex-col items-center justify-center">
+  <div id="screen-login" class="fixed inset-0 bg-surface z-[60] flex flex-col items-center justify-center">
     <div class="text-brand text-5xl mb-4">⬡</div>
     <h1 class="text-2xl font-bold text-white mb-1">Geofence Offer Engine</h1>
     <p class="text-gray-500 text-sm mb-8">Downtown Champaign, IL — Demo</p>
@@ -179,21 +179,6 @@
           <input id="auth-password" type="password" placeholder="••••••••" autocomplete="current-password"
             class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
         </div>
-        <!-- Role selector — only visible on the Register tab -->
-        <div id="role-selector" class="hidden">
-          <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">I am a…</label>
-          <div class="flex gap-2">
-            <button id="role-customer-btn" type="button" onclick="setAuthRole('customer')"
-              class="flex-1 bg-brand text-white text-xs py-2 rounded border border-brand transition-colors">
-              Customer
-            </button>
-            <button id="role-merchant-btn" type="button" onclick="setAuthRole('merchant')"
-              class="flex-1 bg-surface text-gray-400 text-xs py-2 rounded border border-border hover:border-brand transition-colors">
-              Merchant
-            </button>
-          </div>
-        </div>
-
         <div id="auth-error" class="text-red-400 text-xs hidden"></div>
         <button id="auth-submit" onclick="submitAuth()"
           class="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded text-sm transition-colors">
@@ -204,7 +189,7 @@
   </div>
 
   <!-- ── Landing screen (role selection) ──────────────────────────────────── -->
-  <div id="screen-landing" class="fixed inset-0 bg-surface z-[200] hidden flex flex-col items-center justify-center">
+  <div id="screen-landing" class="fixed inset-0 bg-surface z-50 hidden flex flex-col items-center justify-center">
     <div class="text-brand text-5xl mb-4">⬡</div>
     <h1 class="text-2xl font-bold text-white mb-1">Geofence Offer Engine</h1>
     <p class="text-gray-500 text-sm mb-10">Downtown Champaign, IL — Demo</p>
@@ -222,7 +207,7 @@
   </div>
 
   <!-- ── Merchant registration screen ─────────────────────────────────────── -->
-  <div id="screen-merchant" class="fixed inset-0 bg-surface z-[100] flex flex-col items-center justify-start pt-6 overflow-y-auto hidden">
+  <div id="screen-merchant" class="fixed inset-0 bg-surface z-40 flex flex-col items-center justify-start pt-6 overflow-y-auto hidden">
     <div class="bg-card border border-border rounded-xl p-8 w-full max-w-md shadow-xl mb-6">
       <div class="flex items-center gap-2 mb-6">
         <span class="text-brand text-xl">⬡</span>
@@ -253,10 +238,12 @@
           </div>
           <div id="m-map" class="w-full h-36 rounded border border-border"></div>
           <div id="m-geo-error" class="text-red-400 text-xs mt-1 hidden"></div>
-          <div class="mt-2">
+          <div class="flex items-center gap-2 mt-2">
             <input id="m-lat" type="hidden" />
             <input id="m-lng" type="hidden" />
-            <input id="m-radius" type="hidden" value="75" />
+            <input id="m-radius" type="number" placeholder="75" value="75"
+              class="w-24 bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+            <span class="text-gray-600 text-[10px]">Geofence Radius (m)</span>
           </div>
         </div>
 
