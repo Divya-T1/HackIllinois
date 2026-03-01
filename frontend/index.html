@@ -26,22 +26,194 @@
     }
   </script>
 
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@700;800&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body { font-family: 'DM Mono', 'Courier New', monospace; }
+
+    #analytics-drawer {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;  /* Changed from 200 to 9999 */
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(6px);
+    }
+
+    /* ── Leaflet dark tiles ── */
+    .leaflet-tile { filter: brightness(0.55) saturate(0.7) hue-rotate(200deg); }
+    .leaflet-container { background: #0f0f1a; }
+    .leaflet-popup-content-wrapper { background: #1a1a2e; border: 1px solid #2d2d4e; color: #d1d5db; border-radius: 8px; }
+    .leaflet-popup-tip { background: #1a1a2e; }
+
+    .leaflet-pane,
+    .leaflet-control,
+    .leaflet-top,
+    .leaflet-bottom {
+      z-index: 10 !important;  /* Keep map controls accessible but below drawer */
+    }
+
+    /* ── Geofence ── */
+    .geofence-circle:hover { opacity: 0.9 !important; }
+
+    /* ── Offer card ── */
+    .offer-card {
+      background: linear-gradient(135deg, #1e1b4b 0%, #1a1a2e 100%);
+      border: 1px solid #4c1d95;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      animation: slide-in 0.3s ease;
+    }
+    .offer-card.success { border-color: #7c3aed; }
+    .offer-card.fail    { border-color: #374151; }
+
+    /* ── Feed items ── */
+    .feed-item {
+      border-left: 2px solid #2d2d4e;
+      padding-left: 0.5rem;
+      opacity: 0;
+      animation: fade-in 0.4s ease forwards;
+    }
+    .feed-item.triggered  { border-left-color: #7c3aed; }
+    .feed-item.no-trigger { border-left-color: #374151; }
+
+    /* Analytics drawer */
+    #analytics-drawer {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      align-items: flex-start;  /* Changed from flex-end to flex-start */
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(6px);
+    }
+    #analytics-drawer.open {
+      display: flex;
+    }
+    #analytics-drawer-panel {
+      width: 100%;
+      max-width: 520px;
+      max-height: 86vh;
+      margin-top: 20px;  /* Add some spacing from the top */
+      background: #0d1117;
+      border: 1px solid #1e3a5f60;
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 80px rgba(0,0,0,0.9), 0 0 0 1px #3b82f610;  /* Changed shadow direction */
+      animation: slideDown 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);  /* Changed animation */
+    }
+
+    /* Update the animation for top positioning */
+    @keyframes slideDown {
+      from { transform: translateY(-40px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    /* ── Analytics overlay pill ── */
+    #analytics-pill {
+      animation: glow-pulse 3s ease-in-out infinite;
+      transition: transform 0.15s ease;
+    }
+    #analytics-pill:hover { transform: scale(1.03); }
+    #analytics-pill:active { transform: scale(0.97); }
+
+    /* ── Bar animation ── */
+    .spend-bar {
+      width: 0%;
+      transition: width 0.8s cubic-bezier(0.34, 1.1, 0.64, 1);
+    }
+
+    /* ── Map dot pulse ── */
+    .map-dot-ring {
+      animation: ring-ping 2s ease-out infinite;
+    }
+
+    /* #map {
+      z-index: 1;
+      position: relative;
+    } */
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar       { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2d2d4e; border-radius: 2px; }
+
+    /* ── Animations ── */
+    @keyframes slide-in {
+      from { transform: translateY(-6px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 12px #7c3aed50, 0 0 0 1px #7c3aed30; }
+      50%       { box-shadow: 0 0 28px #7c3aed90, 0 0 0 1px #7c3aed60; }
+    }
+    @keyframes ring-ping {
+      0%   { transform: translate(-50%,-50%) scale(1); opacity: 0.7; }
+      100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0; }
+    }
+    @keyframes row-in {
+      from { opacity: 0; transform: translateX(-8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes num-count {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .analytics-row { animation: row-in 0.35s ease both; }
+    .analytics-num { animation: num-count 0.4s ease both; }
+
+    /* ── Tabs ── */
+    .drawer-tab {
+      padding: 7px 16px;
+      font-size: 10px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      transition: all 0.2s ease;
+      background: transparent;
+      color: #475569;
+    }
+    .drawer-tab.active {
+      background: #0d1117;
+      color: #93c5fd;
+      border: 1px solid #1e3a5f60;
+      border-bottom: 1px solid #0d1117;
+    }
+    .drawer-tab:not(.active):hover { color: #64748b; }
+  </style>
 </head>
 
-<body class="bg-surface text-gray-100 font-mono h-screen flex flex-col overflow-hidden">
+<body class="bg-surface text-gray-100 h-screen flex flex-col overflow-hidden">
 
-  <!-- Header -->
+  <!-- ══════════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════ -->
   <header class="bg-card border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
     <div class="flex items-center gap-3">
       <span class="text-brand text-xl font-bold">⬡</span>
-      <span class="text-white font-bold tracking-wide">Geofence Offer Engine</span>
+      <span class="text-white font-bold tracking-wide" style="font-family:'Syne',sans-serif">Geofence Offer Engine</span>
       <span class="text-xs text-gray-500 ml-2">Downtown Champaign, IL — Demo</span>
     </div>
     <div class="flex items-center gap-4 text-xs text-gray-400">
       <button id="back-btn" onclick="goHome()"
         class="text-gray-500 hover:text-white transition-colors hidden">← Home</button>
-      <span id="api-status" class="flex items-center gap-1">
+      <span id="api-status" class="flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span> connecting…
       </span>
       <a href="http://localhost:8001/docs" target="_blank"
@@ -49,10 +221,12 @@
     </div>
   </header>
 
-  <!-- Main layout -->
+  <!-- ══════════════════════════════════════════════════
+       MAIN
+  ══════════════════════════════════════════════════ -->
   <main class="flex flex-1 overflow-hidden">
 
-    <!-- ── Left panel ──────────────────────────────────────────────────────── -->
+    <!-- ── Left sidebar ── -->
     <aside class="w-80 shrink-0 bg-card border-r border-border flex flex-col overflow-hidden">
 
       <!-- Merchant selector -->
@@ -70,11 +244,8 @@
 
       <!-- Checkin simulator -->
       <section class="p-4 border-b border-border">
-        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">
-          Simulate Checkin
-        </label>
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">Simulate Checkin</label>
         <p class="text-xs text-gray-500 mb-3">Click anywhere on the map, or enter coordinates manually.</p>
-
         <div class="space-y-2">
           <div>
             <label class="text-xs text-gray-400">User ID</label>
@@ -93,15 +264,10 @@
                 class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
             </div>
           </div>
-
-          <!-- Quick-jump buttons (geofence centres) -->
           <div id="jump-buttons" class="flex flex-wrap gap-1 mt-1"></div>
-
           <button id="checkin-btn"
             class="w-full bg-brand hover:bg-brand-dark text-white rounded px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40"
-            disabled>
-            Trigger Checkin
-          </button>
+            disabled>Trigger Checkin</button>
         </div>
       </section>
 
@@ -111,43 +277,55 @@
         <div id="offer-result" class="text-xs text-gray-500 italic">No offer yet.</div>
       </section>
 
+      <!-- Analytics button -->
+      <section class="p-4 border-b border-border">
+        <button id="analytics-pill" onclick="openAnalyticsDrawer()"
+          class="w-full flex items-center justify-between bg-surface border border-brand/40 rounded-xl px-4 py-3 text-xs cursor-pointer transition-all hover:border-brand"
+          style="animation: glow-pulse 3s ease-in-out infinite;">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">📊</span>
+            <div class="text-left">
+              <div class="text-[9px] text-brand-light tracking-widest uppercase mb-0.5">Analytics</div>
+              <div class="flex items-center gap-3 text-[11px]">
+                <span class="text-gray-400">Offers <span id="a-total" class="text-white font-semibold ml-1">—</span></span>
+                <span class="text-gray-400">Redeemed <span id="a-redeemed" class="text-green-400 font-semibold ml-1">—</span></span>
+                <span class="text-brand-light font-semibold" id="a-rate">—</span>
+              </div>
+            </div>
+          </div>
+          <span class="text-brand-light">↗</span>
+        </button>
+      </section>
+
       <!-- Recent feed -->
       <section class="p-4 flex-1 overflow-y-auto">
         <div class="flex items-center justify-between mb-2">
           <label class="text-xs text-gray-400 uppercase tracking-widest">Recent Checkins</label>
-          <button id="clear-feed" class="text-xs text-gray-600 hover:text-gray-400">clear</button>
+          <button id="clear-feed" class="text-xs text-gray-600 hover:text-gray-400 transition-colors">clear</button>
         </div>
         <ul id="checkin-feed" class="space-y-2 text-xs"></ul>
       </section>
     </aside>
 
-    <!-- ── Map ────────────────────────────────────────────────────────────────── -->
+    <!-- ── Map area ── -->
     <div class="flex-1 relative">
       <div id="map" class="absolute inset-0"></div>
 
-      <!-- Analytics overlay -->
-      <div id="analytics-panel"
-        class="absolute top-3 right-3 bg-card/90 border border-border rounded-lg p-3 text-xs w-48 hidden backdrop-blur">
-        <div class="text-gray-400 uppercase tracking-widest mb-2 text-[10px]">Analytics</div>
-        <div class="space-y-1">
-          <div class="flex justify-between"><span class="text-gray-400">Offers sent</span><span id="a-total" class="text-white">—</span></div>
-          <div class="flex justify-between"><span class="text-gray-400">Redeemed</span><span id="a-redeemed" class="text-green-400">—</span></div>
-          <div class="flex justify-between"><span class="text-gray-400">Rate</span><span id="a-rate" class="text-brand-light">—</span></div>
-        </div>
-      </div>
+
 
       <!-- Map hint -->
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-card/80 text-gray-400 text-xs px-3 py-1 rounded-full border border-border pointer-events-none">
         Click map to set checkin coordinates
       </div>
     </div>
-
   </main>
 
-  <!-- ── Landing screen ──────────────────────────────────────────────────────── -->
+  <!-- ══════════════════════════════════════════════════
+       LANDING SCREEN
+  ══════════════════════════════════════════════════ -->
   <div id="screen-landing" class="fixed inset-0 bg-surface z-50 flex flex-col items-center justify-center">
     <div class="text-brand text-5xl mb-4">⬡</div>
-    <h1 class="text-2xl font-bold text-white mb-1">Geofence Offer Engine</h1>
+    <h1 class="text-2xl font-bold text-white mb-1" style="font-family:'Syne',sans-serif">Geofence Offer Engine</h1>
     <p class="text-gray-500 text-sm mb-10">Downtown Champaign, IL — Demo</p>
     <p class="text-gray-300 text-sm mb-5">Who are you?</p>
     <div class="flex gap-4">
@@ -162,21 +340,21 @@
     </div>
   </div>
 
-  <!-- ── Merchant registration screen ────────────────────────────────────────── -->
+  <!-- ══════════════════════════════════════════════════
+       MERCHANT REGISTRATION SCREEN
+  ══════════════════════════════════════════════════ -->
   <div id="screen-merchant" class="fixed inset-0 bg-surface z-40 flex flex-col items-center justify-start pt-6 overflow-y-auto hidden">
     <div class="bg-card border border-border rounded-xl p-8 w-full max-w-md shadow-xl mb-6">
       <div class="flex items-center gap-2 mb-6">
         <span class="text-brand text-xl">⬡</span>
-        <h2 class="text-white font-bold text-lg">Merchant Registration</h2>
+        <h2 class="text-white font-bold text-lg" style="font-family:'Syne',sans-serif">Merchant Registration</h2>
       </div>
-
       <div class="space-y-4">
         <div>
           <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Company Name</label>
           <input id="m-name" type="text" placeholder="e.g. Espresso Royale"
             class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
         </div>
-
         <div>
           <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Location (click map to set)</label>
           <div id="m-map" class="w-full h-36 rounded border border-border mb-2"></div>
@@ -196,20 +374,17 @@
           </div>
           <p class="text-gray-600 text-[10px] mt-1">Lat · Lng · Radius (m)</p>
         </div>
-
         <div>
           <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Discount %</label>
           <input id="m-percent" type="number" min="1" max="100" placeholder="e.g. 15"
             class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
         </div>
-
         <div>
           <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Discount Description</label>
           <textarea id="m-description" rows="3"
             placeholder="e.g. 15% off all drinks for new customers this week"
             class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand resize-none"></textarea>
         </div>
-
         <div>
           <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Timeline</label>
           <select id="m-timeline"
@@ -219,19 +394,16 @@
             <option value="month">Per Month</option>
           </select>
         </div>
-
         <div id="m-error" class="text-red-400 text-xs hidden"></div>
         <div id="m-success" class="bg-surface border border-brand/40 rounded p-3 text-xs hidden">
           <div class="text-green-400 font-semibold mb-1">Registered successfully!</div>
           <div id="m-success-detail" class="text-gray-400"></div>
         </div>
-
         <button id="m-submit" onclick="submitMerchantForm()"
           class="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded text-sm transition-colors disabled:opacity-40">
           Submit
         </button>
       </div>
-
       <button onclick="goHome()"
         class="mt-5 text-xs text-gray-500 hover:text-gray-300 w-full text-center transition-colors">
         ← Back to Home
@@ -239,6 +411,715 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- ══════════════════════════════════════════════════
+       ANALYTICS DRAWER
+  ══════════════════════════════════════════════════ -->
+  <div id="analytics-drawer" onclick="handleDrawerBackdropClick(event)">
+    <div id="analytics-drawer-panel">
+
+      <!-- Drawer header -->
+      <div style="padding:20px 24px 0; background:linear-gradient(180deg,#0f1923 0%,#0d1117 100%);">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#e2e8f0;letter-spacing:-0.5px;">
+              Merchant Analytics
+            </div>
+            <div id="drawer-merchant-name" style="font-size:10px;color:#3b82f6;letter-spacing:2px;margin-top:2px;text-transform:uppercase;"></div>
+          </div>
+          <button onclick="closeAnalyticsDrawer()"
+            style="width:32px;height:32px;border-radius:50%;background:#ffffff0f;border:1px solid #ffffff15;
+                   color:#94a3b8;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</button>
+        </div>
+
+        <!-- Summary row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+          <div style="background:#ffffff05;border:1px solid #3b82f620;border-radius:10px;padding:12px 10px;text-align:center;">
+            <div id="d-total" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#60a5fa;">—</div>
+            <div style="font-size:9px;color:#475569;margin-top:3px;letter-spacing:1.5px;">TOTAL</div>
+          </div>
+          <div style="background:#ffffff05;border:1px solid #10b98120;border-radius:10px;padding:12px 10px;text-align:center;">
+            <div id="d-redeemed" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#34d399;">—</div>
+            <div style="font-size:9px;color:#475569;margin-top:3px;letter-spacing:1.5px;">REDEEMED</div>
+          </div>
+          <div style="background:#ffffff05;border:1px solid #a78bfa20;border-radius:10px;padding:12px 10px;text-align:center;">
+            <div id="d-rate" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#a78bfa;">—</div>
+            <div style="font-size:9px;color:#475569;margin-top:3px;letter-spacing:1.5px;">RATE</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex;gap:4px;">
+          <button class="drawer-tab active" id="tab-overview" onclick="switchTab('overview')">Overview</button>
+          <button class="drawer-tab" id="tab-locations" onclick="switchTab('locations')">Locations</button>
+          <button class="drawer-tab" id="tab-feed" onclick="switchTab('feed')">Live Feed</button>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="height:1px;background:linear-gradient(90deg,transparent,#1e3a5f80,transparent);"></div>
+
+      <!-- Tab content -->
+      <div id="drawer-content" style="overflow-y:auto;flex:1;padding:20px 20px 28px;">
+
+        <!-- ── OVERVIEW tab ── -->
+        <div id="tab-content-overview">
+          <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:14px;">OFFER PERFORMANCE</div>
+
+          <!-- Redemption rate bar -->
+          <div style="margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:12px;color:#94a3b8;">Redemption Rate</span>
+              <span id="d-rate-bar-label" style="font-size:12px;color:#a78bfa;font-weight:500;">—</span>
+            </div>
+            <div style="height:8px;border-radius:4px;background:#ffffff0a;overflow:hidden;">
+              <div id="d-rate-bar" class="spend-bar"
+                style="height:100%;border-radius:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa);box-shadow:0 0 10px #7c3aed60;"></div>
+            </div>
+          </div>
+
+          <!-- Pending vs redeemed vs expired -->
+          <div id="status-breakdown" style="margin-bottom:24px;">
+            <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:12px;">OFFER STATUS BREAKDOWN</div>
+            <!-- filled dynamically -->
+          </div>
+
+          <!-- Geofences list -->
+          <div>
+            <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:12px;">ACTIVE GEOFENCES</div>
+            <div id="drawer-geofences" style="display:flex;flex-direction:column;gap:8px;">
+              <!-- filled dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- ── LOCATIONS tab ── -->
+        <div id="tab-content-locations" style="display:none;">
+          <!-- Mini map -->
+          <div id="drawer-map-wrap" style="height:180px;background:radial-gradient(ellipse at center,#0f2a4a 0%,#060a12 70%);
+               border-radius:12px;overflow:hidden;position:relative;margin-bottom:16px;border:1px solid #1e3a5f40;">
+            <!-- grid lines -->
+            <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(5,1fr);pointer-events:none;">
+              <div style="border-right:1px solid #1e3a5f20;"></div>
+              <div style="border-right:1px solid #1e3a5f20;"></div>
+              <div style="border-right:1px solid #1e3a5f20;"></div>
+              <div style="border-right:1px solid #1e3a5f20;"></div>
+              <div></div>
+            </div>
+            <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent calc(33% - 1px),#1e3a5f20 33%,transparent calc(33% + 1px));pointer-events:none;"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                 font-size:10px;color:#1e3a5f80;letter-spacing:3px;pointer-events:none;">CHAMPAIGN · IL</div>
+            <div id="drawer-map-dots"></div>
+          </div>
+
+          <!-- Geofence cards -->
+          <div id="drawer-location-cards" style="display:flex;flex-direction:column;gap:10px;">
+            <!-- filled dynamically -->
+          </div>
+        </div>
+
+        <!-- ── LIVE FEED tab ── -->
+        <div id="tab-content-feed" style="display:none;">
+          <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:14px;">REAL-TIME CHECKIN FEED</div>
+          <div id="drawer-live-feed" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:12px;color:#334155;font-style:italic;">Trigger a checkin to see events here…</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       APP SCRIPT
+  ══════════════════════════════════════════════════ -->
+  <script>
+    /* ── Config ── */
+    const API = "http://localhost:8001";
+
+    /* ── State ── */
+    let map, pinMarker;
+    let mapInitialized = false;
+    let merchantMap, merchantMapMarker;
+    let merchants       = [];
+    let geofenceCircles = [];
+    let selectedMerchant = null;
+    let currentGeofences = [];
+    let drawerOpen = false;
+    let activeTab  = 'overview';
+    let feedEvents = [];  // mirror of the live feed for the drawer
+
+    /* ────────────────────────────────────────────────────
+       MAP
+    ──────────────────────────────────────────────────── */
+    function initMap() {
+      map = L.map("map", { zoomControl: false }).setView([40.1130, -88.2350], 15);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors", maxZoom: 19,
+      }).addTo(map);
+      L.control.zoom({ position: "bottomright" }).addTo(map);
+      map.on("click", (e) => {
+        const { lat, lng } = e.latlng;
+        document.getElementById("sim-lat").value = lat.toFixed(6);
+        document.getElementById("sim-lng").value = lng.toFixed(6);
+        placePinMarker(lat, lng);
+      });
+    }
+
+    function placePinMarker(lat, lng) {
+      if (pinMarker) pinMarker.remove();
+      pinMarker = L.circleMarker([lat, lng], {
+        radius: 6, color: "#a78bfa", fillColor: "#7c3aed", fillOpacity: 1, weight: 2,
+      }).addTo(map).bindPopup(`📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`).openPopup();
+    }
+
+    /* ── Geofence circles ── */
+    function clearGeofenceCircles() {
+      geofenceCircles.forEach(c => c.remove());
+      geofenceCircles = [];
+    }
+
+    function drawGeofences(geofences, merchantName) {
+      clearGeofenceCircles();
+      geofences.forEach(g => {
+        const circle = L.circle([g.lat, g.lng], {
+          radius: g.radius_meters,
+          color: "#7c3aed",
+          fillColor: "#7c3aed",
+          fillOpacity: g.is_active ? 0.15 : 0.04,
+          weight: g.is_active ? 2 : 1,
+          dashArray: g.is_active ? null : "4 4",
+          className: "geofence-circle",
+        }).addTo(map).bindPopup(buildGeofencePopup(g, merchantName));
+
+        L.marker([g.lat, g.lng], {
+          icon: L.divIcon({
+            className: "",
+            html: `<div style="color:#a78bfa;font-size:11px;font-family:monospace;
+                        background:#1a1a2e;border:1px solid #4c1d95;border-radius:4px;
+                        padding:1px 5px;white-space:nowrap;">${merchantName}</div>`,
+            iconAnchor: [0, -12],
+          }),
+        }).addTo(map);
+
+        geofenceCircles.push(circle);
+      });
+      if (geofences.length > 0) map.setView([geofences[0].lat, geofences[0].lng], 17);
+      buildJumpButtons(geofences);
+    }
+
+    function buildGeofencePopup(g, merchantName) {
+      const tiers = g.discount_tiers
+        .map(t => `<li>${t.tier_type}: <b>${t.percent}%</b> off</li>`).join("");
+      return `<div style="font-family:monospace;font-size:12px;min-width:180px">
+        <b style="color:#a78bfa">${merchantName}</b><br/>
+        <span style="color:#9ca3af">${g.name}</span><br/>
+        <hr style="border-color:#2d2d4e;margin:4px 0"/>
+        Radius: ${g.radius_meters}m &nbsp;|&nbsp; Cap: ${g.max_discount}%<br/>
+        Hours: ${g.active_hours_start}–${g.active_hours_end}<br/>
+        <ul style="margin:4px 0;padding-left:12px">${tiers}</ul>
+      </div>`;
+    }
+
+    function buildJumpButtons(geofences) {
+      const container = document.getElementById("jump-buttons");
+      container.innerHTML = "";
+      geofences.forEach(g => {
+        const btn = document.createElement("button");
+        btn.textContent = `⌖ ${g.name.split(" ")[0]}`;
+        btn.className = "text-[10px] bg-surface border border-border rounded px-2 py-0.5 text-brand-light hover:border-brand transition-colors";
+        btn.onclick = () => {
+          document.getElementById("sim-lat").value = g.lat.toFixed(6);
+          document.getElementById("sim-lng").value = g.lng.toFixed(6);
+          placePinMarker(g.lat, g.lng);
+          map.setView([g.lat, g.lng], 18);
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    /* ────────────────────────────────────────────────────
+       MERCHANTS
+    ──────────────────────────────────────────────────── */
+    async function loadMerchants() {
+      try {
+        const res = await fetch(`${API}/v1/merchants/`);
+        if (!res.ok) throw new Error(res.statusText);
+        merchants = await res.json();
+        const sel = document.getElementById("merchant-select");
+        merchants.forEach(m => {
+          const opt = document.createElement("option");
+          opt.value = m.id; opt.textContent = m.name;
+          sel.appendChild(opt);
+        });
+        setStatus("online");
+      } catch (e) {
+        setStatus("offline");
+        console.error("Failed to load merchants:", e);
+      }
+    }
+
+    async function onMerchantChange(merchantId) {
+      if (!merchantId) {
+        selectedMerchant = null;
+        currentGeofences = [];
+        clearGeofenceCircles();
+        document.getElementById("merchant-info").classList.add("hidden");
+        document.getElementById("checkin-btn").disabled = true;
+        return;
+      }
+      selectedMerchant = merchants.find(m => m.id === merchantId);
+      document.getElementById("info-id").textContent  = selectedMerchant.id;
+      document.getElementById("info-key").textContent = selectedMerchant.api_key;
+      document.getElementById("merchant-info").classList.remove("hidden");
+      document.getElementById("checkin-btn").disabled = false;
+
+      try {
+        const res = await fetch(`${API}/v1/merchants/${merchantId}/geofences`);
+        currentGeofences = await res.json();
+        drawGeofences(currentGeofences, selectedMerchant.name);
+      } catch (e) { console.error("Failed to load geofences:", e); }
+
+      loadAnalytics(merchantId);
+    }
+
+    /* ────────────────────────────────────────────────────
+       CHECKIN
+    ──────────────────────────────────────────────────── */
+    async function triggerCheckin() {
+      if (!selectedMerchant) return;
+      const lat    = parseFloat(document.getElementById("sim-lat").value);
+      const lng    = parseFloat(document.getElementById("sim-lng").value);
+      const userId = document.getElementById("user-id").value.trim() || "user_demo_01";
+      if (isNaN(lat) || isNaN(lng)) { alert("Click the map or enter coordinates first."); return; }
+
+      const btn = document.getElementById("checkin-btn");
+      btn.disabled = true; btn.textContent = "Processing…";
+
+      try {
+        const res = await fetch(`${API}/v1/checkins`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, lat, lng, merchant_id: selectedMerchant.id }),
+        });
+        const data = await res.json();
+        renderOfferResult(data, userId, lat, lng);
+        appendFeedItem(data, userId);
+        appendDrawerFeedItem(data, userId);
+        loadAnalytics(selectedMerchant.id);
+      } catch (e) { renderError(e.message); }
+      finally { btn.disabled = false; btn.textContent = "Trigger Checkin"; }
+    }
+
+    /* ────────────────────────────────────────────────────
+       RENDER
+    ──────────────────────────────────────────────────── */
+    function renderOfferResult(data, userId, lat, lng) {
+      const el = document.getElementById("offer-result");
+      if (data.enabled) {
+        el.innerHTML = `
+          <div class="offer-card success">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-green-400 font-bold">✓ Offer Generated</span>
+              <span class="text-brand-light font-bold text-base">${data.discount_percent}% off</span>
+            </div>
+            <div class="text-gray-400 mb-1">${data.geofence_name ?? ""}</div>
+            <div class="text-gray-300 mb-2 text-[11px]">${data.personalization?.explanation ?? ""}</div>
+            <div class="text-gray-500 text-[10px] mb-2">
+              Code: <span class="text-gray-300">${data.personalization?.reason_code ?? ""}</span>
+              &nbsp;·&nbsp; ID: <span class="text-gray-300">${data.offer_id ?? ""}</span>
+            </div>
+            <a href="${data.stripe_payment_link}" target="_blank"
+               class="block text-center bg-brand hover:bg-brand-dark text-white rounded px-3 py-1.5 text-xs font-semibold transition-colors">
+              Open Stripe Checkout ↗
+            </a>
+          </div>`;
+      } else {
+        el.innerHTML = `
+          <div class="offer-card fail">
+            <div class="text-yellow-400 font-semibold mb-1">✗ No offer</div>
+            <div class="text-gray-400">${data.message}</div>
+            <div class="text-gray-600 text-[10px] mt-1">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+          </div>`;
+      }
+    }
+
+    function renderError(msg) {
+      document.getElementById("offer-result").innerHTML = `
+        <div class="offer-card fail">
+          <div class="text-red-400 font-semibold mb-1">Error</div>
+          <div class="text-gray-400 text-[11px]">${msg}</div>
+        </div>`;
+    }
+
+    function appendFeedItem(data, userId) {
+      const feed = document.getElementById("checkin-feed");
+      const li   = document.createElement("li");
+      const time = new Date().toLocaleTimeString();
+      li.className = `feed-item ${data.enabled ? "triggered" : "no-trigger"}`;
+      li.innerHTML = data.enabled
+        ? `<span class="text-brand-light">${userId}</span> → <b class="text-green-400">${data.discount_percent}% off</b><span class="text-gray-500 float-right">${time}</span>`
+        : `<span class="text-gray-400">${userId}</span> — <span class="text-gray-600">${data.message.slice(0, 30)}…</span><span class="text-gray-600 float-right">${time}</span>`;
+      feed.prepend(li);
+      while (feed.children.length > 30) feed.removeChild(feed.lastChild);
+    }
+
+    /* ────────────────────────────────────────────────────
+       ANALYTICS
+    ──────────────────────────────────────────────────── */
+    async function loadAnalytics(merchantId) {
+      try {
+        const res  = await fetch(`${API}/v1/merchants/${merchantId}/analytics`);
+        const data = await res.json();
+
+        // Update pill
+        document.getElementById("a-total").textContent    = data.total_offers;
+        document.getElementById("a-redeemed").textContent  = data.redeemed_offers;
+        document.getElementById("a-rate").textContent      = `${data.redemption_rate}%`;
+
+        // Update drawer summary
+        document.getElementById("d-total").textContent    = data.total_offers;
+        document.getElementById("d-redeemed").textContent  = data.redeemed_offers;
+        document.getElementById("d-rate").textContent      = `${data.redemption_rate}%`;
+        document.getElementById("drawer-merchant-name").textContent = selectedMerchant?.name ?? "";
+
+        // Rate bar
+        const bar = document.getElementById("d-rate-bar");
+        const barLabel = document.getElementById("d-rate-bar-label");
+        barLabel.textContent = `${data.redemption_rate}%`;
+        setTimeout(() => { bar.style.width = `${Math.min(data.redemption_rate, 100)}%`; }, 100);
+
+        // Status breakdown
+        const pending  = data.total_offers - data.redeemed_offers;
+        const redeemed = data.redeemed_offers;
+        renderStatusBreakdown(pending, redeemed, data.total_offers);
+
+        // Geofences in drawer
+        renderDrawerGeofences(currentGeofences);
+
+        // Map dots
+        renderDrawerMapDots(currentGeofences);
+
+      } catch (_) { /* silent */ }
+    }
+
+    function renderStatusBreakdown(pending, redeemed, total) {
+      const el = document.getElementById("status-breakdown");
+      const items = [
+        { label: "Pending",  value: pending,  color: "#f59e0b", pct: total ? pending/total*100 : 0 },
+        { label: "Redeemed", value: redeemed, color: "#34d399", pct: total ? redeemed/total*100 : 0 },
+      ];
+      el.innerHTML = '<div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:12px;">OFFER STATUS BREAKDOWN</div>' +
+        items.map((item, i) => `
+          <div class="analytics-row" style="margin-bottom:14px;animation-delay:${i*0.07}s;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+              <span style="font-size:12px;color:#94a3b8;">${item.label}</span>
+              <span style="font-size:12px;color:${item.color};font-weight:500;">${item.value}</span>
+            </div>
+            <div style="height:5px;border-radius:3px;background:#ffffff08;overflow:hidden;">
+              <div class="spend-bar" style="height:100%;border-radius:3px;background:${item.color};box-shadow:0 0 8px ${item.color}60;transition-delay:${0.1+i*0.08}s;width:${item.pct}%"></div>
+            </div>
+          </div>`).join("");
+    }
+
+    function renderDrawerGeofences(geofences) {
+      const el = document.getElementById("drawer-geofences");
+      if (!geofences.length) {
+        el.innerHTML = '<div style="font-size:12px;color:#334155;font-style:italic;">No geofences configured.</div>';
+        return;
+      }
+      el.innerHTML = geofences.map((g, i) => `
+        <div class="analytics-row" style="background:#ffffff04;border:1px solid #1e3a5f40;border-radius:10px;padding:12px 14px;animation-delay:${i*0.06}s;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:${g.is_active ? '#7c3aed' : '#374151'};box-shadow:${g.is_active ? '0 0 6px #7c3aedaa' : 'none'};flex-shrink:0;"></div>
+              <div>
+                <div style="font-size:12px;color:#e2e8f0;">${g.name}</div>
+                <div style="font-size:10px;color:#475569;margin-top:2px;">${g.radius_meters}m radius · ${g.active_hours_start}–${g.active_hours_end}</div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:#a78bfa;">Cap ${g.max_discount}%</div>
+              <div style="font-size:9px;color:${g.is_active ? '#34d399' : '#475569'};margin-top:2px;letter-spacing:1px;">${g.is_active ? 'ACTIVE' : 'INACTIVE'}</div>
+            </div>
+          </div>
+          ${g.discount_tiers?.length ? `
+            <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+              ${g.discount_tiers.map(t => `<span style="font-size:9px;background:#7c3aed18;border:1px solid #7c3aed30;border-radius:4px;padding:2px 7px;color:#a78bfa;letter-spacing:0.5px;">${t.tier_type} ${t.percent}%</span>`).join("")}
+            </div>` : ""}
+        </div>`).join("");
+    }
+
+    /* dot positions for the mini-map — fixed offsets so they spread nicely */
+    const DOT_POSITIONS = [
+      {top:"42%",left:"48%"},{top:"60%",left:"30%"},{top:"25%",left:"58%"},
+      {top:"70%",left:"55%"},{top:"35%",left:"22%"},{top:"55%",left:"68%"},
+      {top:"20%",left:"42%"},{top:"78%",left:"38%"},
+    ];
+    const DOT_COLORS = ["#7c3aed","#3b82f6","#10b981","#f59e0b","#ef4444","#ec4899","#06b6d4","#8b5cf6"];
+
+    function renderDrawerMapDots(geofences) {
+      const wrap = document.getElementById("drawer-map-dots");
+      wrap.innerHTML = "";
+      geofences.forEach((g, i) => {
+        const pos   = DOT_POSITIONS[i % DOT_POSITIONS.length];
+        const color = DOT_COLORS[i % DOT_COLORS.length];
+        const dot   = document.createElement("div");
+        dot.style.cssText = `position:absolute;top:${pos.top};left:${pos.left};transform:translate(-50%,-50%);`;
+        dot.innerHTML = `
+          <div style="position:relative;width:10px;height:10px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:${color};box-shadow:0 0 8px ${color};"></div>
+            <div class="map-dot-ring" style="position:absolute;width:24px;height:24px;border-radius:50%;border:1px solid ${color}60;top:50%;left:50%;"></div>
+          </div>`;
+        wrap.appendChild(dot);
+      });
+
+      // Location cards
+      const cards = document.getElementById("drawer-location-cards");
+      cards.innerHTML = geofences.map((g, i) => {
+        const color = DOT_COLORS[i % DOT_COLORS.length];
+        const tiers = g.discount_tiers || [];
+        return `
+          <div class="analytics-row" style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+               background:#ffffff04;border:1px solid #1e3a5f30;border-radius:10px;animation-delay:${i*0.06}s;">
+            <div style="width:36px;height:36px;border-radius:9px;background:${color}18;border:1px solid ${color}40;
+                 display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">📍</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${g.name}</div>
+              <div style="font-size:10px;color:#475569;margin-top:2px;">${g.lat.toFixed(4)}, ${g.lng.toFixed(4)} · ${g.radius_meters}m</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:11px;color:${color};">up to ${g.max_discount}%</div>
+              <div style="width:8px;height:8px;border-radius:50%;background:${g.is_active ? '#34d399' : '#374151'};margin-left:auto;margin-top:4px;"></div>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    /* ── Drawer feed ── */
+    function appendDrawerFeedItem(data, userId) {
+      feedEvents.unshift({ data, userId, time: new Date().toLocaleTimeString() });
+      if (feedEvents.length > 50) feedEvents.pop();
+      if (drawerOpen && activeTab === 'feed') renderDrawerFeed();
+    }
+
+    function renderDrawerFeed() {
+      const el = document.getElementById("drawer-live-feed");
+      if (!feedEvents.length) {
+        el.innerHTML = '<div style="font-size:12px;color:#334155;font-style:italic;">Trigger a checkin to see events here…</div>';
+        return;
+      }
+      el.innerHTML = feedEvents.map((ev, i) => `
+        <div class="analytics-row" style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+             background:#ffffff04;border-left:2px solid ${ev.data.enabled ? '#7c3aed' : '#374151'};border-radius:0 8px 8px 0;animation-delay:${i*0.04}s;">
+          <div style="flex:1;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;color:${ev.data.enabled ? '#a78bfa' : '#64748b'};">${ev.userId}</span>
+              <span style="font-size:10px;color:#334155;">${ev.time}</span>
+            </div>
+            <div style="font-size:11px;margin-top:3px;color:${ev.data.enabled ? '#34d399' : '#475569'};">
+              ${ev.data.enabled ? `✓ ${ev.data.discount_percent}% off · ${ev.data.geofence_name ?? ''}` : `✗ ${ev.data.message}`}
+            </div>
+          </div>
+        </div>`).join("");
+    }
+
+    /* ── Tab switching ── */
+    function switchTab(tab) {
+      activeTab = tab;
+      ['overview','locations','feed'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+        document.getElementById(`tab-content-${t}`).style.display = t === tab ? 'block' : 'none';
+      });
+      if (tab === 'feed') renderDrawerFeed();
+    }
+
+    /* ────────────────────────────────────────────────────
+       STATUS
+    ──────────────────────────────────────────────────── */
+    function setStatus(state) {
+      const el = document.getElementById("api-status");
+      if (state === "online") {
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span> API online`;
+      } else {
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> API offline`;
+      }
+    }
+
+    /* ────────────────────────────────────────────────────
+       NAVIGATION
+    ──────────────────────────────────────────────────── */
+    function goHome() {
+      document.getElementById("screen-landing").classList.remove("hidden");
+      document.getElementById("screen-merchant").classList.add("hidden");
+      document.getElementById("back-btn").classList.add("hidden");
+    }
+
+    function selectRole(role) {
+      document.getElementById("screen-landing").classList.add("hidden");
+      document.getElementById("screen-merchant").classList.add("hidden");
+      document.getElementById("back-btn").classList.remove("hidden");
+
+      if (role === "merchant") {
+        document.getElementById("screen-merchant").classList.remove("hidden");
+        setTimeout(initMerchantMap, 80);
+      } else {
+        if (!mapInitialized) {
+          initMap();
+          loadMerchants();
+          mapInitialized = true;
+        } else {
+          map.invalidateSize();
+          reloadMerchants();
+        }
+      }
+    }
+
+    /* ────────────────────────────────────────────────────
+       MERCHANT MAP
+    ──────────────────────────────────────────────────── */
+    function initMerchantMap() {
+      if (merchantMap) { merchantMap.invalidateSize(); return; }
+      merchantMap = L.map("m-map", { zoomControl: true }).setView([40.1130, -88.2350], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors", maxZoom: 19,
+      }).addTo(merchantMap);
+      merchantMap.on("click", (e) => {
+        const { lat, lng } = e.latlng;
+        document.getElementById("m-lat").value = lat.toFixed(6);
+        document.getElementById("m-lng").value = lng.toFixed(6);
+        if (merchantMapMarker) merchantMapMarker.remove();
+        merchantMapMarker = L.circleMarker([lat, lng], {
+          radius: 6, color: "#a78bfa", fillColor: "#7c3aed", fillOpacity: 1, weight: 2,
+        }).addTo(merchantMap).bindPopup(`${lat.toFixed(5)}, ${lng.toFixed(5)}`).openPopup();
+      });
+    }
+
+    /* ────────────────────────────────────────────────────
+       RELOAD MERCHANTS
+    ──────────────────────────────────────────────────── */
+    async function reloadMerchants() {
+      const sel = document.getElementById("merchant-select");
+      sel.innerHTML = '<option value="">— select a merchant —</option>';
+      merchants = []; currentGeofences = [];
+      clearGeofenceCircles();
+      selectedMerchant = null;
+      document.getElementById("merchant-info").classList.add("hidden");
+      document.getElementById("checkin-btn").disabled = true;
+      await loadMerchants();
+    }
+
+    /* ────────────────────────────────────────────────────
+       MERCHANT FORM
+    ──────────────────────────────────────────────────── */
+    async function submitMerchantForm() {
+      const name        = document.getElementById("m-name").value.trim();
+      const lat         = parseFloat(document.getElementById("m-lat").value);
+      const lng         = parseFloat(document.getElementById("m-lng").value);
+      const radius      = parseFloat(document.getElementById("m-radius").value) || 75;
+      const percent     = parseInt(document.getElementById("m-percent").value);
+      const description = document.getElementById("m-description").value.trim();
+      const timeline    = document.getElementById("m-timeline").value;
+      const errorEl     = document.getElementById("m-error");
+      const successEl   = document.getElementById("m-success");
+      const submitBtn   = document.getElementById("m-submit");
+
+      errorEl.classList.add("hidden");
+      successEl.classList.add("hidden");
+
+      if (!name || !description) { errorEl.textContent = "Company name and discount description are required."; errorEl.classList.remove("hidden"); return; }
+      if (isNaN(lat) || isNaN(lng)) { errorEl.textContent = "Click the map (or enter coordinates) to set your location."; errorEl.classList.remove("hidden"); return; }
+      if (isNaN(percent) || percent < 1 || percent > 100) { errorEl.textContent = "Enter a discount % between 1 and 100."; errorEl.classList.remove("hidden"); return; }
+
+      submitBtn.disabled = true; submitBtn.textContent = "Submitting…";
+
+      try {
+        const email = `${name.toLowerCase().replace(/\s+/g, ".")}@demo.geooffer.com`;
+        let merchant;
+
+        const mRes = await fetch(`${API}/v1/merchants/`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email }),
+        });
+
+        if (mRes.status === 409) {
+          const all = await (await fetch(`${API}/v1/merchants/`)).json();
+          merchant = all.find(m => m.name === name);
+          if (!merchant) throw new Error("Merchant exists but could not be found.");
+        } else if (!mRes.ok) {
+          throw new Error((await mRes.json()).detail ?? "Failed to register merchant.");
+        } else {
+          merchant = await mRes.json();
+        }
+
+        const gRes = await fetch(`${API}/v1/merchants/${merchant.id}/geofences`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-Key": merchant.api_key },
+          body: JSON.stringify({
+            name: `${name} Entrance`, lat, lng, radius_meters: radius, max_discount: percent,
+            discount_tiers: [
+              { type: "new_customer",     percent },
+              { type: "frequent_visitor", percent },
+              { type: "lapsed_customer",  percent },
+              { type: "regular",          percent: Math.max(5, Math.floor(percent * 0.6)) },
+            ],
+            active_hours: { start: "06:00", end: "23:00" },
+          }),
+        });
+        if (!gRes.ok) throw new Error((await gRes.json()).detail ?? "Failed to create geofence.");
+
+        const pRes = await fetch(`${API}/v1/promotions/`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company_id: merchant.id, description, timeline }),
+        });
+        if (!pRes.ok) throw new Error((await pRes.json()).detail ?? "Failed to save promotion.");
+
+        document.getElementById("m-success-detail").textContent = `Company ID: ${merchant.id} · Now visible on the customer map.`;
+        successEl.classList.remove("hidden");
+        if (mapInitialized) reloadMerchants();
+
+        document.getElementById("m-name").value = "";
+        document.getElementById("m-lat").value  = "";
+        document.getElementById("m-lng").value  = "";
+        document.getElementById("m-percent").value = "";
+        document.getElementById("m-description").value = "";
+        if (merchantMapMarker) { merchantMapMarker.remove(); merchantMapMarker = null; }
+      } catch (e) {
+        errorEl.textContent = e.message;
+        errorEl.classList.remove("hidden");
+      } finally {
+        submitBtn.disabled = false; submitBtn.textContent = "Submit";
+      }
+    }
+
+    /* ── Drawer open/close ── */
+    function openAnalyticsDrawer() {
+      drawerOpen = true;
+      const drawer = document.getElementById("analytics-drawer");
+      drawer.classList.add("open");
+      // Animate bars after open
+      if (selectedMerchant) loadAnalytics(selectedMerchant.id);
+    }
+
+    function closeAnalyticsDrawer() {
+      drawerOpen = false;
+      document.getElementById("analytics-drawer").classList.remove("open");
+    }
+
+    function handleDrawerBackdropClick(e) {
+      if (e.target === document.getElementById("analytics-drawer")) closeAnalyticsDrawer();
+    }
+
+    /* ────────────────────────────────────────────────────
+       BOOTSTRAP
+    ──────────────────────────────────────────────────── */
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("merchant-select").addEventListener("change", e => onMerchantChange(e.target.value));
+      document.getElementById("checkin-btn").addEventListener("click", triggerCheckin);
+      document.getElementById("clear-feed").addEventListener("click", () => {
+        document.getElementById("checkin-feed").innerHTML = "";
+        feedEvents = [];
+      });
+    });
+  </script>
 </body>
 </html>
