@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Geofence Offer Engine — Champaign Demo</title>
 
-  <!-- Leaflet -->
+  <!-- Leaflet (merchant mini-map only) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- MapLibre GL JS (main 3D customer map) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl/dist/maplibre-gl.css" />
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl/dist/maplibre-gl.js"></script>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -73,25 +77,17 @@
         <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">
           Simulate Checkin
         </label>
-        <p class="text-xs text-gray-500 mb-3">Click anywhere on the map, or enter coordinates manually.</p>
+        <p class="text-xs text-gray-500 mb-3">Click anywhere on the map to set your location.</p>
+
+        <!-- Hidden coordinate inputs — set by map clicks and jump buttons -->
+        <input id="sim-lat" type="hidden" />
+        <input id="sim-lng" type="hidden" />
 
         <div class="space-y-2">
           <div>
             <label class="text-xs text-gray-400">User ID</label>
             <input id="user-id" type="text" value="user_demo_01"
               class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-          </div>
-          <div class="flex gap-2">
-            <div class="flex-1">
-              <label class="text-xs text-gray-400">Lat</label>
-              <input id="sim-lat" type="number" step="0.00001" placeholder="40.10982"
-                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-            </div>
-            <div class="flex-1">
-              <label class="text-xs text-gray-400">Lng</label>
-              <input id="sim-lng" type="number" step="0.00001" placeholder="-88.22814"
-                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-            </div>
           </div>
 
           <!-- Quick-jump buttons (geofence centres) -->
@@ -138,7 +134,7 @@
 
       <!-- Map hint -->
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-card/80 text-gray-400 text-xs px-3 py-1 rounded-full border border-border pointer-events-none">
-        Click map to set checkin coordinates
+        Click map to set checkin location
       </div>
     </div>
 
@@ -178,23 +174,24 @@
         </div>
 
         <div>
-          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Location (click map to set)</label>
-          <div id="m-map" class="w-full h-36 rounded border border-border mb-2"></div>
-          <div class="flex gap-2">
-            <div class="flex-1">
-              <input id="m-lat" type="number" step="0.00001" placeholder="Latitude"
-                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
-            </div>
-            <div class="flex-1">
-              <input id="m-lng" type="number" step="0.00001" placeholder="Longitude"
-                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
-            </div>
-            <div class="w-20">
-              <input id="m-radius" type="number" placeholder="75m" value="75"
-                class="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
-            </div>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Business Address</label>
+          <div class="flex gap-2 mb-2">
+            <input id="m-address" type="text" placeholder="e.g. 708 S Goodwin Ave, Urbana, IL"
+              class="flex-1 bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
+            <button id="m-geo-btn" onclick="geocodeAddress()"
+              class="bg-surface border border-border hover:border-brand text-brand-light text-xs px-3 py-2 rounded transition-colors whitespace-nowrap">
+              Find on Map
+            </button>
           </div>
-          <p class="text-gray-600 text-[10px] mt-1">Lat · Lng · Radius (m)</p>
+          <div id="m-map" class="w-full h-36 rounded border border-border"></div>
+          <div id="m-geo-error" class="text-red-400 text-xs mt-1 hidden"></div>
+          <div class="flex items-center gap-2 mt-2">
+            <input id="m-lat" type="hidden" />
+            <input id="m-lng" type="hidden" />
+            <input id="m-radius" type="number" placeholder="75" value="75"
+              class="w-24 bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+            <span class="text-gray-600 text-[10px]">Radius (m)</span>
+          </div>
         </div>
 
         <div>

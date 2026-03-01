@@ -49,3 +49,17 @@
   border-radius: 50%;
   box-shadow: 0 0 8px #7c3aed;
 }
+
+/* ── MapLibre 3D map dark theme ──────────────────────────────────────────── */
+#map canvas.maplibregl-canvas {
+  filter: brightness(0.55) saturate(0.6) hue-rotate(200deg);
+}
+.maplibregl-popup-content {
+  background: #1a1a2e !important;
+  color: #e5e7eb !important;
+  border: 1px solid #4c1d95 !important;
+  border-radius: 0.5rem !important;
+  font-family: monospace !important;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.3) !important;
+}
+.maplibregl-popup-tip { border-top-color: #4c1d95 !important; }

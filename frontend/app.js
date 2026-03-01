@@ -3,88 +3,147 @@ const API = "http://localhost:8001";
 
 /* ── State ───────────────────────────────────────────────────────────────── */
 let map, pinMarker;
-let mapInitialized = false;
+let mapInitialized    = false;
 let merchantMap, merchantMapMarker;
-let merchants      = [];
-let geofenceCircles = [];
-let selectedMerchant = null;
+let merchants         = [];
+let selectedMerchant  = null;
+let currentGeofences  = [];
+let currentMerchantName = "";
 
-/* ── Map init ────────────────────────────────────────────────────────────── */
+/* ── Main map — MapLibre GL (3D) ─────────────────────────────────────────── */
 function initMap() {
-  // Centre on downtown Champaign
-  map = L.map("map", { zoomControl: false }).setView([40.1130, -88.2350], 15);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors",
-    maxZoom: 19,
-  }).addTo(map);
-
-  L.control.zoom({ position: "bottomright" }).addTo(map);
-
-  map.on("click", (e) => {
-    const { lat, lng } = e.latlng;
-    document.getElementById("sim-lat").value = lat.toFixed(6);
-    document.getElementById("sim-lng").value = lng.toFixed(6);
-    placePinMarker(lat, lng);
+  map = new maplibregl.Map({
+    container: "map",
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [-88.2350, 40.1130],   // [lng, lat]
+    zoom: 15,
+    pitch: 45,
+    bearing: -10,
+    attributionControl: false,
   });
+
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
+  map.addControl(new maplibregl.AttributionControl({ compact: true }));
+
+  map.on("load", () => {
+    // ── Geofence GeoJSON source + layers ──────────────────────────────────
+    map.addSource("geofences", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: "geofences-fill",
+      type: "fill",
+      source: "geofences",
+      paint: { "fill-color": "#7c3aed", "fill-opacity": 0.18 },
+    });
+    map.addLayer({
+      id: "geofences-border",
+      type: "line",
+      source: "geofences",
+      paint: { "line-color": "#a78bfa", "line-width": 2 },
+    });
+
+    // ── 3D buildings ──────────────────────────────────────────────────────
+    try {
+      map.addLayer({
+        id: "3d-buildings",
+        source: "openmaptiles",
+        "source-layer": "building",
+        type: "fill-extrusion",
+        minzoom: 14,
+        paint: {
+          "fill-extrusion-color": "#2a2a4a",
+          "fill-extrusion-height": ["get", "render_height"],
+          "fill-extrusion-base":   ["get", "render_min_height"],
+          "fill-extrusion-opacity": 0.75,
+        },
+      }, "geofences-fill");
+    } catch (_) { /* style may not expose building source */ }
+
+    // ── Map click → place pin (skip if over a geofence) ───────────────────
+    map.on("click", (e) => {
+      const hit = map.queryRenderedFeatures(e.point, { layers: ["geofences-fill"] });
+      if (hit.length) return;
+      const { lng, lat } = e.lngLat;
+      document.getElementById("sim-lat").value = lat.toFixed(6);
+      document.getElementById("sim-lng").value = lng.toFixed(6);
+      placePinMarker(lat, lng);
+    });
+
+    // ── Geofence click → popup ────────────────────────────────────────────
+    map.on("click", "geofences-fill", (e) => {
+      if (!e.features.length) return;
+      const g = currentGeofences.find(x => x.id === e.features[0].properties.id);
+      if (!g) return;
+      new maplibregl.Popup({ closeButton: false, maxWidth: "240px" })
+        .setLngLat(e.lngLat)
+        .setHTML(buildGeofencePopup(g, currentMerchantName))
+        .addTo(map);
+    });
+
+    map.on("mouseenter", "geofences-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "geofences-fill", () => { map.getCanvas().style.cursor = ""; });
+  });
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function makeCirclePolygon(lat, lng, radiusMeters, steps = 64) {
+  const coords = [];
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    const dLat  = (radiusMeters * Math.cos(angle)) / 111320;
+    const dLng  = (radiusMeters * Math.sin(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
+    coords.push([lng + dLng, lat + dLat]);
+  }
+  return { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
 }
 
 function placePinMarker(lat, lng) {
   if (pinMarker) pinMarker.remove();
-  pinMarker = L.circleMarker([lat, lng], {
-    radius: 6,
-    color: "#a78bfa",
-    fillColor: "#7c3aed",
-    fillOpacity: 1,
-    weight: 2,
-  }).addTo(map).bindPopup(`📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`).openPopup();
+  const el = document.createElement("div");
+  el.style.cssText = "width:12px;height:12px;background:#a78bfa;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px #7c3aed;";
+  pinMarker = new maplibregl.Marker({ element: el })
+    .setLngLat([lng, lat])
+    .addTo(map);
 }
 
 /* ── Geofence circles ────────────────────────────────────────────────────── */
 function clearGeofenceCircles() {
-  geofenceCircles.forEach((c) => c.remove());
-  geofenceCircles = [];
+  currentGeofences    = [];
+  currentMerchantName = "";
+  if (!map) return;
+  const src = map.getSource("geofences");
+  if (src) src.setData({ type: "FeatureCollection", features: [] });
 }
 
 function drawGeofences(geofences, merchantName) {
-  clearGeofenceCircles();
-  geofences.forEach((g) => {
-    const circle = L.circle([g.lat, g.lng], {
-      radius: g.radius_meters,
-      color: "#7c3aed",
-      fillColor: "#7c3aed",
-      fillOpacity: g.is_active ? 0.15 : 0.04,
-      weight: g.is_active ? 2 : 1,
-      dashArray: g.is_active ? null : "4 4",
-      className: "geofence-circle",
-    })
-      .addTo(map)
-      .bindPopup(buildGeofencePopup(g, merchantName));
+  currentGeofences    = geofences;
+  currentMerchantName = merchantName;
 
-    // Small label at centre
-    L.marker([g.lat, g.lng], {
-      icon: L.divIcon({
-        className: "",
-        html: `<div style="color:#a78bfa;font-size:11px;font-family:monospace;
-                    background:#1a1a2e;border:1px solid #4c1d95;border-radius:4px;
-                    padding:1px 5px;white-space:nowrap;">${merchantName}</div>`,
-        iconAnchor: [0, -12],
-      }),
-    }).addTo(map);
-
-    geofenceCircles.push(circle);
+  const features = geofences.map(g => {
+    const f = makeCirclePolygon(g.lat, g.lng, g.radius_meters);
+    f.properties = { id: g.id };
+    return f;
   });
 
-  if (geofences.length > 0) {
-    map.setView([geofences[0].lat, geofences[0].lng], 17);
-  }
+  const update = () => {
+    const src = map.getSource("geofences");
+    if (src) src.setData({ type: "FeatureCollection", features });
+    if (geofences.length) {
+      map.flyTo({ center: [geofences[0].lng, geofences[0].lat], zoom: 17, pitch: 45, duration: 800 });
+    }
+  };
+
+  if (map.loaded()) update();
+  else map.once("load", update);
 
   buildJumpButtons(geofences);
 }
 
 function buildGeofencePopup(g, merchantName) {
   const tiers = g.discount_tiers
-    .map((t) => `<li>${t.tier_type}: <b>${t.percent}%</b> off</li>`)
+    .map(t => `<li>${t.tier_type}: <b>${t.percent}%</b> off</li>`)
     .join("");
   return `
     <div style="font-family:monospace;font-size:12px;min-width:180px">
@@ -100,16 +159,15 @@ function buildGeofencePopup(g, merchantName) {
 function buildJumpButtons(geofences) {
   const container = document.getElementById("jump-buttons");
   container.innerHTML = "";
-  geofences.forEach((g) => {
+  geofences.forEach(g => {
     const btn = document.createElement("button");
     btn.textContent = `⌖ ${g.name.split(" ")[0]}`;
-    btn.className =
-      "text-[10px] bg-surface border border-border rounded px-2 py-0.5 text-brand-light hover:border-brand transition-colors";
+    btn.className = "text-[10px] bg-surface border border-border rounded px-2 py-0.5 text-brand-light hover:border-brand transition-colors";
     btn.onclick = () => {
       document.getElementById("sim-lat").value = g.lat.toFixed(6);
       document.getElementById("sim-lng").value = g.lng.toFixed(6);
       placePinMarker(g.lat, g.lng);
-      map.setView([g.lat, g.lng], 18);
+      map.flyTo({ center: [g.lng, g.lat], zoom: 18, pitch: 45, duration: 600 });
     };
     container.appendChild(btn);
   });
@@ -123,7 +181,7 @@ async function loadMerchants() {
     merchants = await res.json();
 
     const sel = document.getElementById("merchant-select");
-    merchants.forEach((m) => {
+    merchants.forEach(m => {
       const opt = document.createElement("option");
       opt.value = m.id;
       opt.textContent = m.name;
@@ -147,18 +205,15 @@ async function onMerchantChange(merchantId) {
     return;
   }
 
-  selectedMerchant = merchants.find((m) => m.id === merchantId);
-
+  selectedMerchant = merchants.find(m => m.id === merchantId);
   document.getElementById("info-id").textContent  = selectedMerchant.id;
   document.getElementById("info-key").textContent = selectedMerchant.api_key;
   document.getElementById("merchant-info").classList.remove("hidden");
   document.getElementById("checkin-btn").disabled = false;
 
-  // Load and draw geofences
   try {
     const res = await fetch(`${API}/v1/merchants/${merchantId}/geofences`);
-    const geofences = await res.json();
-    drawGeofences(geofences, selectedMerchant.name);
+    drawGeofences(await res.json(), selectedMerchant.name);
   } catch (e) {
     console.error("Failed to load geofences:", e);
   }
@@ -170,12 +225,12 @@ async function onMerchantChange(merchantId) {
 async function triggerCheckin() {
   if (!selectedMerchant) return;
 
-  const lat     = parseFloat(document.getElementById("sim-lat").value);
-  const lng     = parseFloat(document.getElementById("sim-lng").value);
-  const userId  = document.getElementById("user-id").value.trim() || "user_demo_01";
+  const lat    = parseFloat(document.getElementById("sim-lat").value);
+  const lng    = parseFloat(document.getElementById("sim-lng").value);
+  const userId = document.getElementById("user-id").value.trim() || "user_demo_01";
 
   if (isNaN(lat) || isNaN(lng)) {
-    alert("Click the map or enter coordinates first.");
+    alert("Click the map to set a location first.");
     return;
   }
 
@@ -187,19 +242,12 @@ async function triggerCheckin() {
     const res = await fetch(`${API}/v1/checkins`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: userId,
-        lat,
-        lng,
-        merchant_id: selectedMerchant.id,
-      }),
+      body: JSON.stringify({ user_id: userId, lat, lng, merchant_id: selectedMerchant.id }),
     });
-
     const data = await res.json();
-    renderOfferResult(data, userId, lat, lng);
+    renderOfferResult(data);
     appendFeedItem(data, userId);
     loadAnalytics(selectedMerchant.id);
-
   } catch (e) {
     renderError(e.message);
   } finally {
@@ -209,9 +257,8 @@ async function triggerCheckin() {
 }
 
 /* ── Render ──────────────────────────────────────────────────────────────── */
-function renderOfferResult(data, userId, lat, lng) {
+function renderOfferResult(data) {
   const el = document.getElementById("offer-result");
-
   if (data.enabled) {
     el.innerHTML = `
       <div class="offer-card success">
@@ -235,7 +282,6 @@ function renderOfferResult(data, userId, lat, lng) {
       <div class="offer-card fail">
         <div class="text-yellow-400 font-semibold mb-1">✗ No offer</div>
         <div class="text-gray-400">${data.message}</div>
-        <div class="text-gray-600 text-[10px] mt-1">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
       </div>`;
   }
 }
@@ -263,8 +309,6 @@ function appendFeedItem(data, userId) {
        <span class="text-gray-600 float-right">${time}</span>`;
 
   feed.prepend(li);
-
-  // Keep feed at max 30 items
   while (feed.children.length > 30) feed.removeChild(feed.lastChild);
 }
 
@@ -273,24 +317,19 @@ async function loadAnalytics(merchantId) {
   try {
     const res  = await fetch(`${API}/v1/merchants/${merchantId}/analytics`);
     const data = await res.json();
-    document.getElementById("a-total").textContent   = data.total_offers;
+    document.getElementById("a-total").textContent    = data.total_offers;
     document.getElementById("a-redeemed").textContent = data.redeemed_offers;
-    document.getElementById("a-rate").textContent    = `${data.redemption_rate}%`;
+    document.getElementById("a-rate").textContent     = `${data.redemption_rate}%`;
     document.getElementById("analytics-panel").classList.remove("hidden");
   } catch (_) { /* silent */ }
 }
 
 /* ── Status indicator ────────────────────────────────────────────────────── */
 function setStatus(state) {
-  const el  = document.getElementById("api-status");
-  const dot = el.querySelector("span");
-  if (state === "online") {
-    dot.className = "w-2 h-2 rounded-full bg-green-400 inline-block";
-    el.innerHTML  = `<span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span> API online`;
-  } else {
-    dot.className = "w-2 h-2 rounded-full bg-red-500 inline-block";
-    el.innerHTML  = `<span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> API offline`;
-  }
+  const el = document.getElementById("api-status");
+  el.innerHTML = state === "online"
+    ? `<span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span> API online`
+    : `<span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> API offline`;
 }
 
 /* ── Screen navigation ───────────────────────────────────────────────────── */
@@ -307,22 +346,20 @@ function selectRole(role) {
 
   if (role === "merchant") {
     document.getElementById("screen-merchant").classList.remove("hidden");
-    // Small delay so the div is visible before Leaflet measures it
     setTimeout(initMerchantMap, 80);
   } else {
-    // Customer view
     if (!mapInitialized) {
       initMap();
       loadMerchants();
       mapInitialized = true;
     } else {
-      map.invalidateSize();
+      map.resize();
       reloadMerchants();
     }
   }
 }
 
-/* ── Merchant mini-map ───────────────────────────────────────────────────── */
+/* ── Merchant mini-map (Leaflet) ─────────────────────────────────────────── */
 function initMerchantMap() {
   if (merchantMap) {
     merchantMap.invalidateSize();
@@ -345,7 +382,48 @@ function initMerchantMap() {
   });
 }
 
-/* ── Reload merchant list (after adding a new merchant) ──────────────────── */
+/* ── Geocode address → pin on mini-map ───────────────────────────────────── */
+async function geocodeAddress() {
+  const address = document.getElementById("m-address").value.trim();
+  const errorEl = document.getElementById("m-geo-error");
+  const btn     = document.getElementById("m-geo-btn");
+  errorEl.classList.add("hidden");
+  if (!address) return;
+
+  btn.textContent = "Finding…";
+  btn.disabled    = true;
+
+  try {
+    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const data = await (await fetch(url, { headers: { "Accept-Language": "en" } })).json();
+
+    if (!data.length) {
+      errorEl.textContent = "Address not found. Try a more specific address.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+
+    const lat = parseFloat(data[0].lat);
+    const lng = parseFloat(data[0].lon);
+
+    document.getElementById("m-lat").value = lat;
+    document.getElementById("m-lng").value = lng;
+
+    merchantMap.setView([lat, lng], 17);
+    if (merchantMapMarker) merchantMapMarker.remove();
+    merchantMapMarker = L.circleMarker([lat, lng], {
+      radius: 6, color: "#a78bfa", fillColor: "#7c3aed", fillOpacity: 1, weight: 2,
+    }).addTo(merchantMap).bindPopup(data[0].display_name).openPopup();
+  } catch (_) {
+    errorEl.textContent = "Geocoding failed. Check your connection and try again.";
+    errorEl.classList.remove("hidden");
+  } finally {
+    btn.textContent = "Find on Map";
+    btn.disabled    = false;
+  }
+}
+
+/* ── Reload merchant list (after new merchant added) ─────────────────────── */
 async function reloadMerchants() {
   const sel = document.getElementById("merchant-select");
   sel.innerHTML = '<option value="">— select a merchant —</option>';
@@ -380,7 +458,7 @@ async function submitMerchantForm() {
     return;
   }
   if (isNaN(lat) || isNaN(lng)) {
-    errorEl.textContent = "Click the map (or enter coordinates) to set your location.";
+    errorEl.textContent = 'Enter an address and click "Find on Map" to set your location.';
     errorEl.classList.remove("hidden");
     return;
   }
@@ -394,7 +472,7 @@ async function submitMerchantForm() {
   submitBtn.textContent = "Submitting…";
 
   try {
-    // POST 1 — create merchant (name + id stored in merchants table)
+    // POST 1 — create merchant (name + id in merchants table)
     const email = `${name.toLowerCase().replace(/\s+/g, ".")}@demo.geooffer.com`;
     let merchant;
 
@@ -405,9 +483,8 @@ async function submitMerchantForm() {
     });
 
     if (mRes.status === 409) {
-      // Already registered — look up by name
       const all = await (await fetch(`${API}/v1/merchants/`)).json();
-      merchant = all.find((m) => m.name === name);
+      merchant  = all.find(m => m.name === name);
       if (!merchant) throw new Error("Merchant exists but could not be found.");
     } else if (!mRes.ok) {
       throw new Error((await mRes.json()).detail ?? "Failed to register merchant.");
@@ -415,24 +492,20 @@ async function submitMerchantForm() {
       merchant = await mRes.json();
     }
 
-    // POST 2 — create geofence for this merchant (shows up on customer map)
+    // POST 2 — create geofence (shows on customer map)
     const gRes = await fetch(`${API}/v1/merchants/${merchant.id}/geofences`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": merchant.api_key,
-      },
+      headers: { "Content-Type": "application/json", "X-API-Key": merchant.api_key },
       body: JSON.stringify({
         name: `${name} Entrance`,
-        lat,
-        lng,
+        lat, lng,
         radius_meters: radius,
         max_discount: percent,
         discount_tiers: [
           { type: "new_customer",     percent },
           { type: "frequent_visitor", percent },
           { type: "lapsed_customer",  percent },
-          { type: "regular",          percent: Math.max(5, Math.floor(percent * 0.6)) },
+          { type: "regular", percent: Math.max(5, Math.floor(percent * 0.6)) },
         ],
         active_hours: { start: "06:00", end: "23:00" },
       }),
@@ -451,15 +524,14 @@ async function submitMerchantForm() {
       `Company ID: ${merchant.id} · Now visible on the customer map.`;
     successEl.classList.remove("hidden");
 
-    // If the customer map is already initialised, refresh it so the new merchant appears
     if (mapInitialized) reloadMerchants();
 
-    // Reset form fields
-    document.getElementById("m-name").value = "";
-    document.getElementById("m-lat").value  = "";
-    document.getElementById("m-lng").value  = "";
-    document.getElementById("m-percent").value = "";
-    document.getElementById("m-description").value = "";
+    // Reset form
+    ["m-name", "m-address", "m-percent", "m-description"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("m-lat").value = "";
+    document.getElementById("m-lng").value = "";
     if (merchantMapMarker) { merchantMapMarker.remove(); merchantMapMarker = null; }
   } catch (e) {
     errorEl.textContent = e.message;
@@ -472,12 +544,10 @@ async function submitMerchantForm() {
 
 /* ── Bootstrap ───────────────────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("merchant-select").addEventListener("change", (e) =>
+  document.getElementById("merchant-select").addEventListener("change", e =>
     onMerchantChange(e.target.value)
   );
-
   document.getElementById("checkin-btn").addEventListener("click", triggerCheckin);
-
   document.getElementById("clear-feed").addEventListener("click", () => {
     document.getElementById("checkin-feed").innerHTML = "";
   });
