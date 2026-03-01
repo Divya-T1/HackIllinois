@@ -182,42 +182,74 @@ def create_stripe_offer(
     price_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Create a Stripe Coupon + PaymentLink inside the merchant's connected account.
-    Falls back to a clearly-labelled mock when no Stripe credentials are configured.
+    Create a Stripe Coupon + PaymentLink on the main Stripe account.
+    stripe_account_id is optional — only used when Stripe Connect is configured.
+    Falls back to a local mock checkout page when credentials are missing.
     """
     stripe_key = os.getenv("STRIPE_SECRET_KEY")
-    effective_price_id = price_id or os.getenv("DEFAULT_PRICE_ID", "")
+    effective_price_id = (
+        price_id
+        or (merchant.stripe_price_id if hasattr(merchant, "stripe_price_id") else None)
+        or os.getenv("DEFAULT_PRICE_ID", "")
+    )
 
-    if not stripe_key or not merchant.stripe_account_id or not effective_price_id:
+    # Only treat a price_id as real if it actually looks like one
+    price_is_real = (
+        bool(effective_price_id)
+        and effective_price_id.startswith("price_")
+        and "..." not in effective_price_id
+        and len(effective_price_id) > 10
+    )
+
+    if not stripe_key or not price_is_real:
         mock_id = uuid4().hex[:12]
+        base = os.getenv("API_BASE_URL", "http://localhost:8000")
         return {
             "coupon_id": f"mock_coupon_{mock_id}",
-            "payment_link": f"https://buy.stripe.com/mock_{mock_id}",
+            "payment_link": f"{base}/demo/checkout/{mock_id}",
             "mock": True,
         }
 
-    import stripe  # imported lazily so the app boots without the package if unused
+    import stripe
 
     stripe.api_key = stripe_key
+
+    # stripe_account is only passed when the merchant has a connected account (Stripe Connect).
+    # For the demo, merchants have no connected account, so we bill via the main account.
+    connected: Optional[str] = merchant.stripe_account_id or None
+    base = os.getenv("API_BASE_URL", "http://localhost:8001")
+
     try:
-        coupon = stripe.Coupon.create(
-            percent_off=discount_percent,
-            duration="once",
-            max_redemptions=1,
-            stripe_account=merchant.stripe_account_id,
-        )
-        payment_link = stripe.PaymentLink.create(
-            line_items=[{"price": effective_price_id, "quantity": 1}],
-            discounts=[{"coupon": coupon.id}],
-            stripe_account=merchant.stripe_account_id,
-        )
-        return {"coupon_id": coupon.id, "payment_link": payment_link.url, "mock": False}
+        coupon_kwargs: Dict[str, Any] = {
+            "percent_off": discount_percent,
+            "duration": "once",
+            "max_redemptions": 1,
+        }
+        if connected:
+            coupon_kwargs["stripe_account"] = connected
+
+        coupon = stripe.Coupon.create(**coupon_kwargs)
+
+        # checkout.Session is more reliable than PaymentLink for coupon discounts
+        session_kwargs: Dict[str, Any] = {
+            "payment_method_types": ["card"],
+            "line_items": [{"price": effective_price_id, "quantity": 1}],
+            "mode": "payment",
+            "discounts": [{"coupon": coupon.id}],
+            "success_url": f"{base}/?checkout=success",
+            "cancel_url": f"{base}/?checkout=cancel",
+        }
+        if connected:
+            session_kwargs["stripe_account"] = connected
+
+        session = stripe.checkout.Session.create(**session_kwargs)
+        return {"coupon_id": coupon.id, "payment_link": session.url, "mock": False}
 
     except Exception as exc:
         mock_id = uuid4().hex[:8]
         return {
             "coupon_id": f"err_coupon_{mock_id}",
-            "payment_link": f"https://buy.stripe.com/mock_{mock_id}",
+            "payment_link": f"{base}/demo/checkout/{mock_id}",
             "mock": True,
             "error": str(exc),
         }
