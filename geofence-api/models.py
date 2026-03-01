@@ -36,8 +36,8 @@ class Geofence(Base):
     lng = Column(Float, nullable=False)
     radius_meters = Column(Float, default=75.0)
     max_discount = Column(Integer, default=20)
-    active_hours_start = Column(String, default="07:00")
-    active_hours_end = Column(String, default="20:00")
+    active_hours_start = Column(String, default="00:00")
+    active_hours_end = Column(String, default="23:59")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
 
@@ -111,6 +111,16 @@ class MerchantPromotion(Base):
     created_at = Column(DateTime, default=utcnow)
 
     merchant = relationship("Merchant", backref="promotions")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=lambda: f"usr_{uuid4().hex[:12]}")
+    username = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=False)  # merchant | customer
+    created_at = Column(DateTime, default=utcnow)
 
 
 class Offer(Base):

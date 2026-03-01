@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from database import engine, Base
-from routers import merchants, geofences, checkins, analytics, webhooks, promotions
+from routers import merchants, geofences, checkins, analytics, webhooks, promotions, auth
 
 Base.metadata.create_all(bind=engine)
 
@@ -22,11 +22,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/v1/auth", tags=["auth"])
 app.include_router(merchants.router, prefix="/v1/merchants", tags=["merchants"])
 app.include_router(geofences.router, prefix="/v1/merchants", tags=["geofences"])
 app.include_router(checkins.router, prefix="/v1", tags=["checkins"])

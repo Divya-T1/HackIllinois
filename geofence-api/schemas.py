@@ -39,8 +39,8 @@ class DiscountTierResponse(BaseModel):
 # ── Geofence ──────────────────────────────────────────────────────────────────
 
 class ActiveHours(BaseModel):
-    start: str = "07:00"
-    end: str = "20:00"
+    start: str = "00:00"
+    end: str = "23:59"
 
 
 class GeofenceCreate(BaseModel):
@@ -116,6 +116,28 @@ class PromotionResponse(BaseModel):
     company_id: str
     description: str
     timeline: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    role: str  # merchant | customer
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    role: str
     created_at: datetime
 
     model_config = {"from_attributes": True}

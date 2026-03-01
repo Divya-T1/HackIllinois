@@ -35,59 +35,103 @@ function loadStoredUser() {
     currentUser = JSON.parse(raw);
     showWelcomeStep();
   } else {
-    showEmailStep();
+    showSignInStep();
   }
 }
 
-function showEmailStep() {
-  document.getElementById("login-step-email").classList.remove("hidden");
+function showSignInStep() {
+  document.getElementById("login-step-signin").classList.remove("hidden");
+  document.getElementById("login-step-register").classList.add("hidden");
   document.getElementById("login-step-welcome").classList.add("hidden");
-  document.getElementById("login-step-role").classList.add("hidden");
+}
+
+function showRegisterStep() {
+  document.getElementById("login-step-signin").classList.add("hidden");
+  document.getElementById("login-step-register").classList.remove("hidden");
+  document.getElementById("login-step-welcome").classList.add("hidden");
 }
 
 function showWelcomeStep() {
-  document.getElementById("login-step-email").classList.add("hidden");
-  document.getElementById("login-step-role").classList.add("hidden");
+  document.getElementById("login-step-signin").classList.add("hidden");
+  document.getElementById("login-step-register").classList.add("hidden");
   document.getElementById("login-step-welcome").classList.remove("hidden");
-  document.getElementById("login-welcome-email").textContent = currentUser.email;
+  document.getElementById("login-welcome-name").textContent = currentUser.username;
   document.getElementById("login-welcome-role").textContent =
     currentUser.role === "merchant" ? "Registered as Merchant" : "Registered as Customer";
 }
 
-function handleLoginContinue() {
-  const email = document.getElementById("login-email").value.trim().toLowerCase();
-  const errEl = document.getElementById("login-error");
+async function handleSignIn() {
+  const username = document.getElementById("signin-username").value.trim();
+  const password = document.getElementById("signin-password").value;
+  const errEl    = document.getElementById("signin-error");
   errEl.classList.add("hidden");
 
-  if (!email || !email.includes("@") || !email.includes(".")) {
-    errEl.textContent = "Please enter a valid email address.";
+  if (!username || !password) {
+    errEl.textContent = "Please enter your username and password.";
     errEl.classList.remove("hidden");
     return;
   }
 
-  const raw = localStorage.getItem("gfoe_user");
-  if (raw) {
-    const stored = JSON.parse(raw);
-    if (stored.email === email) {
-      currentUser = stored;
-      showWelcomeStep();
+  try {
+    const res = await fetch(`${API}/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errEl.textContent = err.detail ?? "Sign in failed.";
+      errEl.classList.remove("hidden");
       return;
     }
-    // Different email — sign out the old session and offer role selection
-    localStorage.removeItem("gfoe_user");
+    const user = await res.json();
+    currentUser = { userId: user.id, username: user.username, role: user.role };
+    localStorage.setItem("gfoe_user", JSON.stringify(currentUser));
+    proceedToApp();
+  } catch (e) {
+    errEl.textContent = "Could not reach server. Is the API running?";
+    errEl.classList.remove("hidden");
   }
-
-  // New email — show role selection
-  document.getElementById("login-step-email").classList.add("hidden");
-  document.getElementById("login-step-role").classList.remove("hidden");
 }
 
-function registerAs(role) {
-  const email  = document.getElementById("login-email").value.trim().toLowerCase();
-  const userId = "u_" + email.replace(/[^a-z0-9]/g, "_").slice(0, 24);
-  currentUser  = { email, role, userId };
-  localStorage.setItem("gfoe_user", JSON.stringify(currentUser));
-  proceedToApp();
+async function handleRegister(role) {
+  const username = document.getElementById("reg-username").value.trim();
+  const password = document.getElementById("reg-password").value;
+  const confirm  = document.getElementById("reg-confirm").value;
+  const errEl    = document.getElementById("register-error");
+  errEl.classList.add("hidden");
+
+  if (!username || !password || !confirm) {
+    errEl.textContent = "All fields are required.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  if (password !== confirm) {
+    errEl.textContent = "Passwords do not match.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/v1/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, role }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errEl.textContent = err.detail ?? "Registration failed.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+    const user = await res.json();
+    currentUser = { userId: user.id, username: user.username, role: user.role };
+    localStorage.setItem("gfoe_user", JSON.stringify(currentUser));
+    proceedToApp();
+  } catch (e) {
+    errEl.textContent = "Could not reach server. Is the API running?";
+    errEl.classList.remove("hidden");
+  }
 }
 
 function proceedToApp() {
@@ -98,12 +142,9 @@ function proceedToApp() {
 function signOut() {
   localStorage.removeItem("gfoe_user");
   currentUser = null;
-  document.getElementById("login-email").value = "";
-  showEmailStep();
-}
-
-function backToEmail() {
-  showEmailStep();
+  document.getElementById("signin-username").value = "";
+  document.getElementById("signin-password").value = "";
+  showSignInStep();
 }
 
 /* ── Screen navigation ───────────────────────────────────────────────────── */
@@ -111,9 +152,8 @@ function goHome() {
   document.getElementById("screen-login").classList.remove("hidden");
   document.getElementById("screen-merchant").classList.add("hidden");
   document.getElementById("back-btn").classList.add("hidden");
-  // If user is logged in, show the welcome step rather than email form
   if (currentUser) showWelcomeStep();
-  else showEmailStep();
+  else showSignInStep();
 }
 
 function selectRole(role) {
@@ -917,8 +957,10 @@ async function submitMerchantForm() {
   submitBtn.textContent = "Submitting…";
 
   try {
-    // Use the logged-in user's email — prevents the same user registering twice
-    const email = currentUser?.email ?? `${name.toLowerCase().replace(/\s+/g, ".")}@demo.geooffer.com`;
+    // Use the logged-in user's ID as a stable unique email — prevents re-registration
+    const email = currentUser?.userId
+      ? `${currentUser.userId}@geofence.demo`
+      : `${name.toLowerCase().replace(/\s+/g, ".")}@demo.geooffer.com`;
     let merchant;
 
     const mRes = await fetch(`${API}/v1/merchants/`, {
@@ -955,7 +997,7 @@ async function submitMerchantForm() {
             { type: "lapsed_customer",  percent },
             { type: "regular", percent: Math.max(5, Math.floor(percent * 0.6)) },
           ],
-          active_hours: { start: "06:00", end: "23:00" },
+          active_hours: { start: "00:00", end: "23:59" },
         }),
       });
       if (!gRes.ok) throw new Error((await gRes.json()).detail ?? "Failed to create geofence.");

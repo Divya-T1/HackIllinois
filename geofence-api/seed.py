@@ -36,7 +36,7 @@ MERCHANTS: list[dict] = [
                 "lng": -88.24215,
                 "radius_meters": 80,
                 "max_discount": 25,
-                "active_hours_start": "07:00",
+                "active_hours_start": "2:00",
                 "active_hours_end": "23:59",
                 "tiers": [
                     {"tier_type": "new_customer",     "percent": 15},
@@ -57,7 +57,7 @@ MERCHANTS: list[dict] = [
                 "lng": -88.22814,
                 "radius_meters": 80,
                 "max_discount": 20,
-                "active_hours_start": "06:00",
+                "active_hours_start": "02:00",
                 "active_hours_end": "23:59",
                 "tiers": [
                     {"tier_type": "new_customer",     "percent": 15},
@@ -78,7 +78,7 @@ MERCHANTS: list[dict] = [
                 "lng": -88.24225,
                 "radius_meters": 60,
                 "max_discount": 25,
-                "active_hours_start": "11:00",
+                "active_hours_start": "2:00",
                 "active_hours_end": "23:59",
                 "tiers": [
                     {"tier_type": "new_customer",     "percent": 15},
@@ -99,7 +99,7 @@ MERCHANTS: list[dict] = [
                 "lng": -88.23918,
                 "radius_meters": 70,
                 "max_discount": 15,
-                "active_hours_start": "18:00",
+                "active_hours_start": "2:00",
                 "active_hours_end": "23:59",
                 "tiers": [
                     {"tier_type": "new_customer",     "percent": 10},
@@ -119,7 +119,7 @@ MERCHANTS: list[dict] = [
                 "lng": -88.22905,
                 "radius_meters": 75,
                 "max_discount": 20,
-                "active_hours_start": "10:00",
+                "active_hours_start": "2:00",
                 "active_hours_end": "23:59",
                 "tiers": [
                     {"tier_type": "new_customer",     "percent": 10},
@@ -140,7 +140,7 @@ MERCHANTS: list[dict] = [
                 "lng": -88.24212,
                 "radius_meters": 65,
                 "max_discount": 20,
-                "active_hours_start": "10:00",
+                "active_hours_start": "2:00",
                 "active_hours_end": "23:59",
                 "tiers": [
                     {"tier_type": "new_customer",     "percent": 10},
