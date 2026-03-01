@@ -53,46 +53,60 @@
     </div>
   </header>
 
-  <!-- Main layout -->
+  <!-- Main layout (customer view) -->
   <main class="flex flex-1 overflow-hidden">
 
-    <!-- ── Left panel ──────────────────────────────────────────────────────── -->
+    <!-- ── Left panel ────────────────────────────────────────────────────── -->
     <aside class="w-80 shrink-0 bg-card border-r border-border flex flex-col overflow-hidden">
 
-      <!-- Merchant selector -->
+      <!-- My Location -->
+      <section id="location-section" class="p-4 border-b border-border hidden">
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">My Location</label>
+        <button id="loc-btn" onclick="requestLocation()"
+          class="w-full bg-surface border border-border hover:border-brand text-brand-light text-sm rounded px-3 py-2 transition-colors text-left">
+          Use My Location
+        </button>
+        <div id="loc-status" class="text-xs text-gray-600 mt-1"></div>
+
+        <div id="radius-controls" class="hidden mt-3 space-y-1">
+          <div class="flex justify-between text-xs text-gray-400">
+            <span>Search radius</span>
+            <span id="radius-label" class="text-brand-light font-semibold">1.0 km</span>
+          </div>
+          <input type="range" id="radius-slider" min="100" max="3000" step="100" value="1000"
+            oninput="onRadiusChange(this.value)"
+            class="w-full accent-brand" />
+          <div id="merchants-in-range" class="text-xs text-gray-600"></div>
+        </div>
+      </section>
+
+      <!-- Merchant selector (custom scrollable dropdown) -->
       <section class="p-4 border-b border-border">
         <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Merchant</label>
-        <select id="merchant-select"
-          class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
-          <option value="">— select a merchant —</option>
-        </select>
-        <div id="merchant-info" class="mt-2 text-xs text-gray-500 hidden">
-          <div>ID: <span id="info-id" class="text-gray-300"></span></div>
-          <div>Key: <span id="info-key" class="text-gray-300 break-all"></span></div>
+        <div id="merchant-dropdown" class="relative">
+          <button id="merchant-dropdown-btn" onclick="toggleMerchantDropdown()"
+            class="w-full bg-surface border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-brand flex items-center justify-between gap-2">
+            <span id="merchant-dropdown-label" class="text-gray-500 truncate text-left">— select a merchant —</span>
+            <span class="text-gray-500 shrink-0 text-xs">▾</span>
+          </button>
+          <div id="merchant-dropdown-list"
+            class="hidden absolute z-20 w-full bg-surface border border-border rounded mt-1 shadow-xl overflow-y-auto"
+            style="max-height:240px;">
+            <!-- populated by JS -->
+          </div>
         </div>
       </section>
 
       <!-- Checkin simulator -->
       <section class="p-4 border-b border-border">
-        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">
-          Simulate Checkin
-        </label>
-        <p class="text-xs text-gray-500 mb-3">Click anywhere on the map to set your location.</p>
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-2 block">Simulate Checkin</label>
+        <p class="text-xs text-gray-500 mb-3">Tap anywhere on the map to set your location.</p>
 
-        <!-- Hidden coordinate inputs — set by map clicks and jump buttons -->
         <input id="sim-lat" type="hidden" />
         <input id="sim-lng" type="hidden" />
 
         <div class="space-y-2">
-          <div>
-            <label class="text-xs text-gray-400">User ID</label>
-            <input id="user-id" type="text" value="user_demo_01"
-              class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-          </div>
-
-          <!-- Quick-jump buttons (geofence centres) -->
-          <div id="jump-buttons" class="flex flex-wrap gap-1 mt-1"></div>
-
+          <div id="jump-buttons" class="flex flex-wrap gap-1"></div>
           <button id="checkin-btn"
             class="w-full bg-brand hover:bg-brand-dark text-white rounded px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40"
             disabled>
@@ -117,11 +131,11 @@
       </section>
     </aside>
 
-    <!-- ── Map ────────────────────────────────────────────────────────────────── -->
+    <!-- ── Map ───────────────────────────────────────────────────────────── -->
     <div class="flex-1 relative">
       <div id="map" class="absolute inset-0"></div>
 
-      <!-- Analytics pill (top-right) -->
+      <!-- Analytics pill -->
       <div id="analytics-pill-wrap" class="absolute top-3 right-3 hidden">
         <button id="analytics-pill" onclick="openAnalyticsDrawer()"
           class="flex items-center gap-2.5 bg-card/95 border border-brand/40 rounded-xl px-4 py-2.5 text-xs cursor-pointer backdrop-blur-sm transition-all hover:border-brand">
@@ -139,31 +153,77 @@
 
       <!-- Map hint -->
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-card/80 text-gray-400 text-xs px-3 py-1 rounded-full border border-border pointer-events-none">
-        Click map to set checkin location
+        Tap map to set checkin location
       </div>
     </div>
 
   </main>
 
-  <!-- ── Landing screen ──────────────────────────────────────────────────────── -->
-  <div id="screen-landing" class="fixed inset-0 bg-surface z-50 flex flex-col items-center justify-center">
+
+  <!-- ── Login screen (shown first, covers everything) ───────────────────────── -->
+  <div id="screen-login" class="fixed inset-0 bg-surface z-50 flex flex-col items-center justify-center px-4">
     <div class="text-brand text-5xl mb-4">⬡</div>
     <h1 class="text-2xl font-bold text-white mb-1">Geofence Offer Engine</h1>
-    <p class="text-gray-500 text-sm mb-10">Downtown Champaign, IL — Demo</p>
-    <p class="text-gray-300 text-sm mb-5">Who are you?</p>
-    <div class="flex gap-4">
-      <button onclick="selectRole('merchant')"
-        class="bg-brand hover:bg-brand-dark text-white font-semibold px-8 py-3 rounded-lg text-sm transition-colors">
-        I'm a Merchant
-      </button>
-      <button onclick="selectRole('customer')"
-        class="bg-card hover:bg-border border border-border text-white font-semibold px-8 py-3 rounded-lg text-sm transition-colors">
-        I'm a Customer
-      </button>
+    <p class="text-gray-500 text-sm mb-8">Downtown Champaign, IL — Demo</p>
+
+    <div class="bg-card border border-border rounded-xl p-8 w-full max-w-sm shadow-xl">
+
+      <!-- Step 1: Email -->
+      <div id="login-step-email">
+        <h2 class="text-white font-bold text-lg mb-5">Sign In</h2>
+        <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Email</label>
+        <input id="login-email" type="email" placeholder="you@example.com"
+          class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand mb-3"
+          onkeydown="if(event.key==='Enter') handleLoginContinue()" />
+        <button onclick="handleLoginContinue()"
+          class="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded text-sm transition-colors">
+          Continue →
+        </button>
+        <div id="login-error" class="text-red-400 text-xs mt-2 hidden"></div>
+      </div>
+
+      <!-- Step 2a: Returning user -->
+      <div id="login-step-welcome" class="hidden">
+        <div class="text-green-400 font-semibold mb-2">Welcome back!</div>
+        <div id="login-welcome-email" class="text-white text-sm mb-1"></div>
+        <div id="login-welcome-role" class="text-gray-500 text-xs mb-5"></div>
+        <button onclick="proceedToApp()"
+          class="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded text-sm transition-colors mb-2">
+          Continue →
+        </button>
+        <button onclick="signOut()"
+          class="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition-colors">
+          ← Different account
+        </button>
+      </div>
+
+      <!-- Step 2b: New user role selection -->
+      <div id="login-step-role" class="hidden">
+        <h2 class="text-white font-bold text-lg mb-2">Choose your role</h2>
+        <p class="text-gray-500 text-xs mb-5">
+          Your role is tied to this email. Use a different email to register as the other role.
+        </p>
+        <div class="flex gap-3 mb-4">
+          <button onclick="registerAs('merchant')"
+            class="flex-1 bg-brand hover:bg-brand-dark text-white font-semibold px-4 py-3 rounded text-sm transition-colors">
+            I'm a Merchant
+          </button>
+          <button onclick="registerAs('customer')"
+            class="flex-1 bg-surface hover:bg-border border border-border text-white font-semibold px-4 py-3 rounded text-sm transition-colors">
+            I'm a Customer
+          </button>
+        </div>
+        <button onclick="backToEmail()"
+          class="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition-colors">
+          ← Back
+        </button>
+      </div>
+
     </div>
   </div>
 
-  <!-- ── Merchant registration screen ────────────────────────────────────────── -->
+
+  <!-- ── Merchant registration screen (z-40) ──────────────────────────────── -->
   <div id="screen-merchant" class="fixed inset-0 bg-surface z-40 flex flex-col items-center justify-start pt-6 overflow-y-auto hidden">
     <div class="bg-card border border-border rounded-xl p-8 w-full max-w-md shadow-xl mb-6">
       <div class="flex items-center gap-2 mb-6">
@@ -190,17 +250,12 @@
           </div>
           <div id="m-map" class="w-full h-36 rounded border border-border"></div>
           <div id="m-geo-error" class="text-red-400 text-xs mt-1 hidden"></div>
-          <div class="flex items-center gap-2 mt-2">
-            <input id="m-lat" type="hidden" />
-            <input id="m-lng" type="hidden" />
-            <input id="m-radius" type="number" placeholder="75" value="75"
-              class="w-24 bg-surface border border-border rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
-            <span class="text-gray-600 text-[10px]">Radius (m)</span>
-          </div>
+          <input id="m-lat" type="hidden" />
+          <input id="m-lng" type="hidden" />
         </div>
 
         <div>
-          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Discount %</label>
+          <label class="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Max Discount %</label>
           <input id="m-percent" type="number" min="1" max="100" placeholder="e.g. 15"
             class="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
         </div>
@@ -250,7 +305,6 @@
   <div id="analytics-drawer" onclick="handleDrawerBackdropClick(event)">
     <div id="analytics-drawer-panel">
 
-      <!-- Header -->
       <div style="padding:20px 24px 0;background:linear-gradient(180deg,#0f1923 0%,#0d1117 100%);">
         <div class="flex items-center justify-between mb-4">
           <div>
@@ -261,7 +315,6 @@
             style="width:32px;height:32px;border-radius:50%;background:#ffffff0f;border:1px solid #ffffff15;color:#94a3b8;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</button>
         </div>
 
-        <!-- Summary -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
           <div style="background:#ffffff05;border:1px solid #3b82f620;border-radius:10px;padding:12px 10px;text-align:center;">
             <div id="d-total" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#60a5fa;">—</div>
@@ -277,7 +330,6 @@
           </div>
         </div>
 
-        <!-- Tabs -->
         <div style="display:flex;gap:4px;">
           <button class="drawer-tab active" id="tab-overview" onclick="switchTab('overview')">Overview</button>
           <button class="drawer-tab" id="tab-locations" onclick="switchTab('locations')">Locations</button>
@@ -287,10 +339,8 @@
 
       <div style="height:1px;background:linear-gradient(90deg,transparent,#1e3a5f80,transparent);"></div>
 
-      <!-- Tab content -->
       <div id="drawer-content" style="overflow-y:auto;flex:1;padding:20px 20px 28px;">
 
-        <!-- Overview -->
         <div id="tab-content-overview">
           <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:14px;">OFFER PERFORMANCE</div>
           <div style="margin-bottom:20px;">
@@ -311,7 +361,6 @@
           </div>
         </div>
 
-        <!-- Locations -->
         <div id="tab-content-locations" style="display:none;">
           <div id="drawer-map-wrap" style="height:180px;background:radial-gradient(ellipse at center,#0f2a4a 0%,#060a12 70%);border-radius:12px;overflow:hidden;position:relative;margin-bottom:16px;border:1px solid #1e3a5f40;">
             <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(5,1fr);pointer-events:none;">
@@ -325,7 +374,6 @@
           <div id="drawer-location-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
 
-        <!-- Live Feed -->
         <div id="tab-content-feed" style="display:none;">
           <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:14px;">REAL-TIME CHECKIN FEED</div>
           <div id="drawer-live-feed" style="display:flex;flex-direction:column;gap:8px;">
