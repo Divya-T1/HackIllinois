@@ -121,15 +121,20 @@
     <div class="flex-1 relative">
       <div id="map" class="absolute inset-0"></div>
 
-      <!-- Analytics overlay -->
-      <div id="analytics-panel"
-        class="absolute top-3 right-3 bg-card/90 border border-border rounded-lg p-3 text-xs w-48 hidden backdrop-blur">
-        <div class="text-gray-400 uppercase tracking-widest mb-2 text-[10px]">Analytics</div>
-        <div class="space-y-1">
-          <div class="flex justify-between"><span class="text-gray-400">Offers sent</span><span id="a-total" class="text-white">—</span></div>
-          <div class="flex justify-between"><span class="text-gray-400">Redeemed</span><span id="a-redeemed" class="text-green-400">—</span></div>
-          <div class="flex justify-between"><span class="text-gray-400">Rate</span><span id="a-rate" class="text-brand-light">—</span></div>
-        </div>
+      <!-- Analytics pill (top-right) -->
+      <div id="analytics-pill-wrap" class="absolute top-3 right-3 hidden">
+        <button id="analytics-pill" onclick="openAnalyticsDrawer()"
+          class="flex items-center gap-2.5 bg-card/95 border border-brand/40 rounded-xl px-4 py-2.5 text-xs cursor-pointer backdrop-blur-sm transition-all hover:border-brand">
+          <div class="flex flex-col items-end">
+            <span class="text-[9px] text-brand-light tracking-widest uppercase mb-0.5">Analytics</span>
+            <div class="flex items-center gap-3">
+              <span class="text-gray-400">Offers <span id="a-total" class="text-white font-semibold ml-1">—</span></span>
+              <span class="text-gray-400">Redeemed <span id="a-redeemed" class="text-green-400 font-semibold ml-1">—</span></span>
+              <span class="text-brand-light font-semibold" id="a-rate">—</span>
+            </div>
+          </div>
+          <span class="text-brand-light text-base">↗</span>
+        </button>
       </div>
 
       <!-- Map hint -->
@@ -233,6 +238,102 @@
         class="mt-5 text-xs text-gray-500 hover:text-gray-300 w-full text-center transition-colors">
         ← Back to Home
       </button>
+    </div>
+  </div>
+
+
+  <!-- Google Fonts for drawer -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
+  <!-- Analytics Drawer -->
+  <div id="analytics-drawer" onclick="handleDrawerBackdropClick(event)">
+    <div id="analytics-drawer-panel">
+
+      <!-- Header -->
+      <div style="padding:20px 24px 0;background:linear-gradient(180deg,#0f1923 0%,#0d1117 100%);">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#e2e8f0;letter-spacing:-0.5px;">Merchant Analytics</div>
+            <div id="drawer-merchant-name" style="font-size:10px;color:#3b82f6;letter-spacing:2px;margin-top:2px;text-transform:uppercase;"></div>
+          </div>
+          <button onclick="closeAnalyticsDrawer()"
+            style="width:32px;height:32px;border-radius:50%;background:#ffffff0f;border:1px solid #ffffff15;color:#94a3b8;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</button>
+        </div>
+
+        <!-- Summary -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+          <div style="background:#ffffff05;border:1px solid #3b82f620;border-radius:10px;padding:12px 10px;text-align:center;">
+            <div id="d-total" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#60a5fa;">—</div>
+            <div style="font-size:9px;color:#475569;margin-top:3px;letter-spacing:1.5px;">TOTAL</div>
+          </div>
+          <div style="background:#ffffff05;border:1px solid #10b98120;border-radius:10px;padding:12px 10px;text-align:center;">
+            <div id="d-redeemed" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#34d399;">—</div>
+            <div style="font-size:9px;color:#475569;margin-top:3px;letter-spacing:1.5px;">REDEEMED</div>
+          </div>
+          <div style="background:#ffffff05;border:1px solid #a78bfa20;border-radius:10px;padding:12px 10px;text-align:center;">
+            <div id="d-rate" class="analytics-num" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#a78bfa;">—</div>
+            <div style="font-size:9px;color:#475569;margin-top:3px;letter-spacing:1.5px;">RATE</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex;gap:4px;">
+          <button class="drawer-tab active" id="tab-overview" onclick="switchTab('overview')">Overview</button>
+          <button class="drawer-tab" id="tab-locations" onclick="switchTab('locations')">Locations</button>
+          <button class="drawer-tab" id="tab-feed" onclick="switchTab('feed')">Live Feed</button>
+        </div>
+      </div>
+
+      <div style="height:1px;background:linear-gradient(90deg,transparent,#1e3a5f80,transparent);"></div>
+
+      <!-- Tab content -->
+      <div id="drawer-content" style="overflow-y:auto;flex:1;padding:20px 20px 28px;">
+
+        <!-- Overview -->
+        <div id="tab-content-overview">
+          <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:14px;">OFFER PERFORMANCE</div>
+          <div style="margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:12px;color:#94a3b8;">Redemption Rate</span>
+              <span id="d-rate-bar-label" style="font-size:12px;color:#a78bfa;font-weight:500;">—</span>
+            </div>
+            <div style="height:8px;border-radius:4px;background:#ffffff0a;overflow:hidden;">
+              <div id="d-rate-bar" class="spend-bar" style="height:100%;border-radius:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa);box-shadow:0 0 10px #7c3aed60;"></div>
+            </div>
+          </div>
+          <div id="status-breakdown" style="margin-bottom:24px;">
+            <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:12px;">OFFER STATUS BREAKDOWN</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:12px;">ACTIVE GEOFENCES</div>
+            <div id="drawer-geofences" style="display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Locations -->
+        <div id="tab-content-locations" style="display:none;">
+          <div id="drawer-map-wrap" style="height:180px;background:radial-gradient(ellipse at center,#0f2a4a 0%,#060a12 70%);border-radius:12px;overflow:hidden;position:relative;margin-bottom:16px;border:1px solid #1e3a5f40;">
+            <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(5,1fr);pointer-events:none;">
+              <div style="border-right:1px solid #1e3a5f20;"></div><div style="border-right:1px solid #1e3a5f20;"></div>
+              <div style="border-right:1px solid #1e3a5f20;"></div><div style="border-right:1px solid #1e3a5f20;"></div><div></div>
+            </div>
+            <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent calc(33% - 1px),#1e3a5f20 33%,transparent calc(33% + 1px));pointer-events:none;"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1e3a5f80;letter-spacing:3px;pointer-events:none;">CHAMPAIGN · IL</div>
+            <div id="drawer-map-dots"></div>
+          </div>
+          <div id="drawer-location-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+
+        <!-- Live Feed -->
+        <div id="tab-content-feed" style="display:none;">
+          <div style="font-size:10px;color:#475569;letter-spacing:2px;margin-bottom:14px;">REAL-TIME CHECKIN FEED</div>
+          <div id="drawer-live-feed" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:12px;color:#334155;font-style:italic;">Trigger a checkin to see events here…</div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 

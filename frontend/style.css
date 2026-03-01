@@ -63,3 +63,100 @@
   box-shadow: 0 4px 20px rgba(124, 58, 237, 0.3) !important;
 }
 .maplibregl-popup-tip { border-top-color: #4c1d95 !important; }
+
+/* ── Analytics pill (top-right overlay) ─────────────────────────────────── */
+#analytics-pill {
+  animation: glow-pulse 3s ease-in-out infinite;
+  transition: transform 0.15s ease;
+}
+#analytics-pill:hover  { transform: scale(1.03); }
+#analytics-pill:active { transform: scale(0.97); }
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px #7c3aed50, 0 0 0 1px #7c3aed30; }
+  50%       { box-shadow: 0 0 28px #7c3aed90, 0 0 0 1px #7c3aed60; }
+}
+
+/* ── Analytics drawer ────────────────────────────────────────────────────── */
+#analytics-drawer {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(6px);
+}
+#analytics-drawer.open { display: flex; }
+
+#analytics-drawer-panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: 86vh;
+  margin-top: 20px;
+  background: #0d1117;
+  border: 1px solid #1e3a5f60;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 80px rgba(0,0,0,0.9), 0 0 0 1px #3b82f610;
+  animation: slideDown 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-40px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+/* ── Drawer tabs ─────────────────────────────────────────────────────────── */
+.drawer-tab {
+  padding: 7px 16px;
+  font-size: 10px;
+  font-family: 'DM Mono', 'Courier New', monospace;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  transition: all 0.2s ease;
+  background: transparent;
+  color: #475569;
+}
+.drawer-tab.active {
+  background: #0d1117;
+  color: #93c5fd;
+  border: 1px solid #1e3a5f60;
+  border-bottom: 1px solid #0d1117;
+}
+.drawer-tab:not(.active):hover { color: #64748b; }
+
+/* ── Animated bars in drawer ─────────────────────────────────────────────── */
+.spend-bar {
+  width: 0%;
+  transition: width 0.8s cubic-bezier(0.34, 1.1, 0.64, 1);
+}
+
+/* ── Map dot pulse ───────────────────────────────────────────────────────── */
+.map-dot-ring {
+  animation: ring-ping 2s ease-out infinite;
+}
+@keyframes ring-ping {
+  0%   { transform: translate(-50%,-50%) scale(1);   opacity: 0.7; }
+  100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0;   }
+}
+
+/* ── Staggered row animations ────────────────────────────────────────────── */
+.analytics-row { animation: row-in 0.35s ease both; }
+.analytics-num { animation: num-count 0.4s ease both; }
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes num-count {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
